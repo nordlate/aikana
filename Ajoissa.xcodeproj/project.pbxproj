@@ -1,0 +1,489 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		DFDD668FD7AB771872363A44 /* AjoissaCore in Frameworks */ = {isa = PBXBuildFile; productRef = 9D0A039038B45EDD72B90E1D /* AjoissaCore */; };
+		E08B72C3A3E741846EB22314 /* AjoissaCore in Frameworks */ = {isa = PBXBuildFile; productRef = 393210982562BC854E6AB3E3 /* AjoissaCore */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		C9D875F70AA7E9C63856CC81 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 3E3F7BDDA51A55F22DDBA541 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 9C31F6677C696546F1441387;
+			remoteInfo = Ajoissa;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		3CB1DEB1F99CB8EFE19230A4 /* AjoissaCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = AjoissaCore; path = Packages/AjoissaCore; sourceTree = SOURCE_ROOT; };
+		53318BDA98F61DE8749CDB36 /* Ajoissa.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Ajoissa.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		C4BE65712EEC8BE2B1F847A7 /* AjoissaTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AjoissaTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		0099EDEAD4C579AC8974F279 /* Ajoissa */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			explicitFileTypes = {
+			};
+			explicitFolders = (
+			);
+			path = Ajoissa;
+			sourceTree = "<group>";
+		};
+		22C1F14F2FEAE3139F80DEE7 /* AjoissaTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			explicitFileTypes = {
+			};
+			explicitFolders = (
+			);
+			path = AjoissaTests;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		5A3DC0AF87A017BFB0782418 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DFDD668FD7AB771872363A44 /* AjoissaCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D17B39EB4476C49CB793520F /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E08B72C3A3E741846EB22314 /* AjoissaCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		2351DB9B013BAE5F399A5E4A /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				53318BDA98F61DE8749CDB36 /* Ajoissa.app */,
+				C4BE65712EEC8BE2B1F847A7 /* AjoissaTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		847C8DB9D3833F4F32F76F8F /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				3CB1DEB1F99CB8EFE19230A4 /* AjoissaCore */,
+			);
+			path = Packages;
+			sourceTree = "<group>";
+		};
+		9338B6F596ADA60B43E36A7F = {
+			isa = PBXGroup;
+			children = (
+				0099EDEAD4C579AC8974F279 /* Ajoissa */,
+				22C1F14F2FEAE3139F80DEE7 /* AjoissaTests */,
+				847C8DB9D3833F4F32F76F8F /* Packages */,
+				2351DB9B013BAE5F399A5E4A /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		9810804DF3E6A0A95CC948C6 /* AjoissaTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B03956A931DC5DF8859FC3C4 /* Build configuration list for PBXNativeTarget "AjoissaTests" */;
+			buildPhases = (
+				E3CEA318BBA67B7C9563F5CB /* Sources */,
+				448D8FC7B5BE2BD63E6CCC57 /* Resources */,
+				5A3DC0AF87A017BFB0782418 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				ABE0FF2D91E619F04CCEB03C /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				22C1F14F2FEAE3139F80DEE7 /* AjoissaTests */,
+			);
+			name = AjoissaTests;
+			packageProductDependencies = (
+				9D0A039038B45EDD72B90E1D /* AjoissaCore */,
+			);
+			productName = AjoissaTests;
+			productReference = C4BE65712EEC8BE2B1F847A7 /* AjoissaTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		9C31F6677C696546F1441387 /* Ajoissa */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0C54B5968F01C9C6384C750C /* Build configuration list for PBXNativeTarget "Ajoissa" */;
+			buildPhases = (
+				D91524FC9F8743B63D4C9465 /* Sources */,
+				5A89E83B782DFCFEA889BD68 /* Resources */,
+				D17B39EB4476C49CB793520F /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				0099EDEAD4C579AC8974F279 /* Ajoissa */,
+			);
+			name = Ajoissa;
+			packageProductDependencies = (
+				393210982562BC854E6AB3E3 /* AjoissaCore */,
+			);
+			productName = Ajoissa;
+			productReference = 53318BDA98F61DE8749CDB36 /* Ajoissa.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		3E3F7BDDA51A55F22DDBA541 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					9810804DF3E6A0A95CC948C6 = {
+						DevelopmentTeam = 8296FNMH37;
+						ProvisioningStyle = Automatic;
+					};
+					9C31F6677C696546F1441387 = {
+						DevelopmentTeam = 8296FNMH37;
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 537A76FC18B9E94848B08ADE /* Build configuration list for PBXProject "Ajoissa" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 9338B6F596ADA60B43E36A7F;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				AEC8CD6F723EFBD990BDA6BF /* XCLocalSwiftPackageReference "Packages/AjoissaCore" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 2351DB9B013BAE5F399A5E4A /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				9C31F6677C696546F1441387 /* Ajoissa */,
+				9810804DF3E6A0A95CC948C6 /* AjoissaTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		448D8FC7B5BE2BD63E6CCC57 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5A89E83B782DFCFEA889BD68 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		D91524FC9F8743B63D4C9465 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E3CEA318BBA67B7C9563F5CB /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		ABE0FF2D91E619F04CCEB03C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 9C31F6677C696546F1441387 /* Ajoissa */;
+			targetProxy = C9D875F70AA7E9C63856CC81 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		045B83A8920DFEC2642E1E11 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.nordlate.ajoissa.tests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Ajoissa.app/Contents/MacOS/Ajoissa";
+			};
+			name = Release;
+		};
+		1E2368843E908E9491416F5F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				INFOPLIST_KEY_LSUIElement = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "© Nordlate";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.nordlate.ajoissa;
+				PRODUCT_NAME = Ajoissa;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		9C7283F762CBACF3C9F1A5EC /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				INFOPLIST_KEY_LSUIElement = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "© Nordlate";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.nordlate.ajoissa;
+				PRODUCT_NAME = Ajoissa;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		D9598A7ED02F4D3D245D0E09 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = 8296FNMH37;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.3;
+				MARKETING_VERSION = 0.1.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		FEA324C231E4C0E1EF98394B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 8296FNMH37;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.3;
+				MARKETING_VERSION = 0.1.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		FF53E4B82B2305DCB755B1A5 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.nordlate.ajoissa.tests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Ajoissa.app/Contents/MacOS/Ajoissa";
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		0C54B5968F01C9C6384C750C /* Build configuration list for PBXNativeTarget "Ajoissa" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1E2368843E908E9491416F5F /* Debug */,
+				9C7283F762CBACF3C9F1A5EC /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		537A76FC18B9E94848B08ADE /* Build configuration list for PBXProject "Ajoissa" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D9598A7ED02F4D3D245D0E09 /* Debug */,
+				FEA324C231E4C0E1EF98394B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		B03956A931DC5DF8859FC3C4 /* Build configuration list for PBXNativeTarget "AjoissaTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				FF53E4B82B2305DCB755B1A5 /* Debug */,
+				045B83A8920DFEC2642E1E11 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		AEC8CD6F723EFBD990BDA6BF /* XCLocalSwiftPackageReference "Packages/AjoissaCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/AjoissaCore;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		393210982562BC854E6AB3E3 /* AjoissaCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = AjoissaCore;
+		};
+		9D0A039038B45EDD72B90E1D /* AjoissaCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = AjoissaCore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 3E3F7BDDA51A55F22DDBA541 /* Project object */;
+}

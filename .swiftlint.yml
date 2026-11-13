@@ -1,0 +1,31 @@
+included:
+  - Ajoissa
+  - AjoissaTests
+  - Packages/AjoissaCore/Sources
+  - Packages/AjoissaCore/Tests
+
+excluded:
+  - .build
+  - Packages/AjoissaCore/.build
+
+opt_in_rules:
+  - empty_count
+  - explicit_init
+  - first_where
+  - joined_default_parameter
+  - prefer_self_in_static_references
+  - redundant_nil_coalescing
+  - sorted_imports
+
+analyzer_rules:
+  - unused_declaration
+
+disabled_rules:
+  - trailing_whitespace
+  - force_cast
+  - force_try
+  - line_length
+  - identifier_name
+  - todo
+
+reporter: xcode
