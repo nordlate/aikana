@@ -169,6 +169,10 @@ final class WatchModel {
             saveProblem = nil
         case let .looked(config, reports, _, problem):
             content = .jobs(HostGroup.groups(of: reports, hosts: config.hosts))
+            if let shown = shownJobID, !reports.contains(where: { $0.id == shown }) {
+                // A job that left the config must not open by itself if it comes back.
+                shownJobID = nil
+            }
             saveProblem = problem.map(Self.describe)
         }
     }
@@ -189,7 +193,16 @@ final class WatchModel {
     /// With notifications switched off nothing is told, and what would have been told is not kept for later:
     /// switching them on again must not bring up old news.
     private func announce(_ outcome: WatchSession.Outcome) async {
-        guard case let .looked(_, _, alerts, _) = outcome else { return }
+        guard case let .looked(_, reports, alerts, _) = outcome else { return }
+        // What was told stands only while the job is still as it was told. Anything else ends it, also
+        // when no alert said so: a job taken out of the config, or one set not to notify for a while.
+        let states = Dictionary(reports.filter(\.job.notify).map { ($0.id, $0.state) }) { first, _ in first }
+        lastTold = lastTold.filter { jobID, kind in
+            switch kind {
+            case let .problem(state): states[jobID] == state
+            case .recovered: states[jobID] == .ok
+            }
+        }
         let new = alerts.filter { lastTold[$0.jobID] != $0.kind }
         for alert in new {
             lastTold[alert.jobID] = alert.kind

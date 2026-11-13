@@ -23,12 +23,6 @@ struct StatusMenuView: View {
             FooterView(model: model)
         }
         .frame(width: Self.panelWidth, height: Self.panelHeight)
-        .onChange(of: model.reports.map(\.id)) { _, ids in
-            // A job that left the config must not open by itself if it comes back.
-            if let id = model.shownJobID, !ids.contains(id) {
-                model.showJob(withID: nil)
-            }
-        }
     }
 
     private var header: some View {

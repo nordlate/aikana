@@ -38,10 +38,12 @@ Ajoissa sends a system notification when a job is found `failed`, `missed` or `s
 Everything one look finds is combined into one notification. Clicking a notification about one job opens the panel on that job.
 
 - A job with `notify: false` in the config is shown and never notifies.
-- "Notifications" in the menu switches all of them off. What happens while they are off is not brought up when you switch them on again, but a recovery of a job you were told about still is.
+- "Notifications" in the menu switches all of them off. A problem that starts while they are off is not brought up when you switch them on again; the job's recovery still is.
 - "Notify When Fine Again" switches off the recovery notifications only.
 - `host offline` and `unknown` never notify. Once other machines are read, a machine marked `mayBeOffline` will not notify for being unreachable.
 - There is no daily summary.
+
+The first look after installing tells, in one notification, every job that is already in trouble.
 
 What you were last told about a job is kept in its record in the history file, so restarting Ajoissa does not repeat it. `ajoissa status` reads and writes the same history and never uses it up. The first time, macOS asks whether Ajoissa may show notifications; one that is due before you answer is not shown later.
 

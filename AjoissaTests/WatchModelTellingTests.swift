@@ -95,7 +95,51 @@ final class WatchModelTellingTests: WatchModelTestCase {
         Alert(kind: .recovered, jobID: id, jobName: id, hostID: "local", reason: "why")
     }
 
+    func testAProblemThatEndedWithoutARecoveryAlertDoesNotSwallowTheNextOne() async {
+        // The job was set not to notify, or left the config, while it was in trouble: no recovery was told.
+        let model = model(rounds: Rounds([
+            looked(alerts: [failed("a")]),
+            .looked(config: config(), reports: [report("a", .ok)], alerts: [], saveProblem: nil),
+            looked(alerts: [failed("a")])
+        ]))
+
+        await model.refresh()
+        await model.refresh()
+        await model.refresh()
+
+        let titles = await told.announcements.map(\.title)
+        XCTAssertEqual(titles, ["a failed", "a failed"])
+    }
+
+    func testAJobThatLeftTheConfigIsForgotten() async {
+        let model = model(rounds: Rounds([looked(alerts: [failed("a")]), looked(), looked(alerts: [failed("a")])]))
+
+        await model.refresh()
+        await model.refresh()
+        await model.refresh()
+
+        let count = await told.announcements.count
+        XCTAssertEqual(count, 2)
+    }
+
+    func testAShownJobThatLeftTheConfigIsNoLongerShown() async {
+        let model = model(rounds: Rounds([looked(report("a", .ok)), looked(report("b", .ok))]))
+        await model.refresh()
+        model.showJob(withID: "a")
+
+        await model.refresh()
+
+        XCTAssertNil(model.shownJobID)
+    }
+
+    /// A look that found each alerted job in the state its alert says.
     private func looked(alerts: [Alert]) -> WatchSession.Outcome {
-        .looked(config: config(), reports: [], alerts: alerts, saveProblem: nil)
+        let reports = alerts.map { alert in
+            switch alert.kind {
+            case let .problem(state): report(alert.jobID, state)
+            case .recovered: report(alert.jobID, .ok)
+            }
+        }
+        return .looked(config: config(), reports: reports, alerts: alerts, saveProblem: nil)
     }
 }
