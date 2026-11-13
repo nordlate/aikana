@@ -29,14 +29,21 @@ public struct Timetable: Sendable, Equatable, Codable {
         /// The latest moment at or before `date` that the rule matches.
         func lastOccurrence(onOrBefore date: Date, calendar: Calendar) -> Date? {
             var day = calendar.startOfDay(for: date)
+            // On the day itself, hours after the one `date` is in cannot match.
+            var latestHour = calendar.component(.hour, from: date)
             for _ in 0..<Self.searchDays {
                 if matches(day: day, calendar: calendar) {
-                    for moment in moments(on: day, calendar: calendar).reversed() where moment <= date {
-                        return moment
+                    for hour in hours.reversed() where hour <= latestHour {
+                        for minute in minutes.reversed() {
+                            if let moment = moment(on: day, hour: hour, minute: minute, calendar: calendar), moment <= date {
+                                return moment
+                            }
+                        }
                     }
                 }
                 guard let previous = calendar.date(byAdding: .day, value: -1, to: day) else { return nil }
                 day = previous
+                latestHour = 23
             }
             return nil
         }
@@ -44,16 +51,32 @@ public struct Timetable: Sendable, Equatable, Codable {
         /// The first moment after `date` that the rule matches.
         func nextOccurrence(after date: Date, calendar: Calendar) -> Date? {
             var day = calendar.startOfDay(for: date)
+            // On the day itself, hours before the one `date` is in cannot match. On a day the clocks are moved
+            // an hour may be off by one, so one more is searched.
+            var earliestHour = calendar.component(.hour, from: date) - 1
             for _ in 0..<Self.searchDays {
                 if matches(day: day, calendar: calendar) {
-                    for moment in moments(on: day, calendar: calendar) where moment > date {
-                        return moment
+                    for hour in hours where hour >= earliestHour {
+                        for minute in minutes {
+                            if let moment = moment(on: day, hour: hour, minute: minute, calendar: calendar), moment > date {
+                                return moment
+                            }
+                        }
                     }
                 }
                 guard let following = calendar.date(byAdding: .day, value: 1, to: day) else { return nil }
                 day = following
+                earliestHour = 0
             }
             return nil
+        }
+
+        private var hours: [Int] {
+            hour.map { [$0] } ?? Array(0...23)
+        }
+
+        private var minutes: [Int] {
+            minute.map { [$0] } ?? Array(0...59)
         }
 
         private func matches(day: Date, calendar: Calendar) -> Bool {
@@ -64,22 +87,20 @@ public struct Timetable: Sendable, Equatable, Codable {
                 && (weekday == nil || weekday.map { $0 % 7 + 1 } == parts.weekday)
         }
 
-        /// Every moment of one day that the rule's hour and minute match, in order.
-        private func moments(on day: Date, calendar: Calendar) -> [Date] {
+        /// One time of day on one day. A time the clocks skip that day comes back moved forward; if that moves
+        /// it out of the day, there is no such moment.
+        private func moment(on day: Date, hour: Int, minute: Int, calendar: Calendar) -> Date? {
             let date = calendar.dateComponents([.year, .month, .day], from: day)
-            let hours = hour.map { [$0] } ?? Array(0...23)
-            let minutes = minute.map { [$0] } ?? Array(0...59)
-            var moments: [Date] = []
-            for hour in hours {
-                for minute in minutes {
-                    let parts = DateComponents(year: date.year, month: date.month, day: date.day, hour: hour, minute: minute)
-                    // A time the clocks skip that day comes back moved forward; one that left the day is dropped.
-                    if let moment = calendar.date(from: parts), calendar.isDate(moment, inSameDayAs: day) {
-                        moments.append(moment)
-                    }
-                }
+            let parts = DateComponents(year: date.year, month: date.month, day: date.day, hour: hour, minute: minute)
+            guard let moment = calendar.date(from: parts), calendar.isDate(moment, inSameDayAs: day) else { return nil }
+            // When the clocks go back, a time of day comes twice and `Calendar` gives the second. The job is
+            // due the first time, so a run then must count; the same reading an hour earlier is that first time.
+            let earlier = moment.addingTimeInterval(-3600)
+            let reading = calendar.dateComponents([.day, .hour, .minute], from: earlier)
+            if reading.day == date.day, reading.hour == hour, reading.minute == minute {
+                return earlier
             }
-            return moments.sorted()
+            return moment
         }
     }
 

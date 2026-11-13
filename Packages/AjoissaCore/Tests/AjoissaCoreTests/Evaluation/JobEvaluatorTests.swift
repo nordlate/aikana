@@ -115,41 +115,6 @@ final class JobEvaluatorTests: XCTestCase {
         XCTAssertEqual(job.evaluate(at: "2026-11-14 23:00", Scenario.loaded(runs: 0, exit: .neverExited)).state, .missed)
     }
 
-    // MARK: - Asleep over the scheduled time
-
-    func testAsleepOverTheScheduledTimeThenCaughtUp() {
-        let job = Scenario.watchedSinceYesterday()
-
-        // Woken at 07:00. launchd makes up for the 02:00 run on wake, so the grace counts from the wake.
-        let onWake = job.evaluate(at: "2026-11-14 07:00:20", Scenario.loaded(runs: 3, awakeSince: "2026-11-14 07:00"))
-        XCTAssertEqual(onWake.state, .waiting)
-        XCTAssertEqual(onWake.reason, "the run due at 2026-11-14 02:00 has not been seen yet; it has until 2026-11-14 07:30")
-
-        XCTAssertEqual(job.evaluate(at: "2026-11-14 07:01:20", Scenario.loaded(runs: 4, awakeSince: "2026-11-14 07:00")).state, .ok)
-    }
-
-    func testAsleepAndTheRunStartedBeforeTheFirstLookAfterWaking() {
-        let job = Scenario.watchedSinceYesterday()
-
-        // Last looked at 23:00. One run was scheduled since, and one started: it is the 02:00 run made up on wake.
-        let evaluation = job.evaluate(at: "2026-11-14 07:00:20", Scenario.loaded(runs: 4, awakeSince: "2026-11-14 07:00"))
-
-        XCTAssertEqual(evaluation.state, .ok)
-    }
-
-    func testAsleepAndNotCaughtUpIsMissedOnceTheGraceAfterWakingIsOver() {
-        let job = Scenario.watchedSinceYesterday()
-
-        XCTAssertEqual(job.evaluate(at: "2026-11-14 07:30", Scenario.loaded(runs: 3, awakeSince: "2026-11-14 07:00")).state, .waiting)
-        XCTAssertEqual(job.evaluate(at: "2026-11-14 07:31", Scenario.loaded(runs: 3, awakeSince: "2026-11-14 07:00")).state, .missed)
-    }
-
-    func testWakeBeforeTheScheduledTimeDoesNotExtendTheGrace() {
-        let job = Scenario.watchedSinceYesterday()
-
-        XCTAssertEqual(job.evaluate(at: "2026-11-14 02:31", Scenario.loaded(runs: 3, awakeSince: "2026-11-14 01:00")).state, .missed)
-    }
-
     // MARK: - Schedule changed
 
     func testScheduleChangedIsJudgedFromTheChangeOn() {
@@ -254,12 +219,15 @@ final class JobEvaluatorTests: XCTestCase {
 
         let ran = job.evaluate(at: "2026-11-14 12:10", Scenario.loaded(runs: 11, timetable: every15))
         XCTAssertEqual(ran.state, .ok)
-        XCTAssertEqual(ran.reason, "it has run since 2026-11-14 11:50")
+        XCTAssertEqual(ran.reason, "it last ran around 2026-11-14 12:10; the next run is expected by 2026-11-14 12:30")
 
-        XCTAssertEqual(job.evaluate(at: "2026-11-14 12:19", Scenario.loaded(runs: 11, timetable: every15)).state, .ok)
+        XCTAssertEqual(job.evaluate(at: "2026-11-14 12:30", Scenario.loaded(runs: 11, timetable: every15)).state, .ok)
         let missed = job.evaluate(at: "2026-11-14 12:31", Scenario.loaded(runs: 11, timetable: every15))
         XCTAssertEqual(missed.state, .missed)
-        XCTAssertEqual(missed.reason, "there is no sign of a run since 2026-11-14 12:11")
+        XCTAssertEqual(missed.reason, "there is no sign of a run since 2026-11-14 12:10")
+        // It stays missed until a run is seen; it does not look fine again on its own.
+        XCTAssertEqual(job.evaluate(at: "2026-11-14 18:00", Scenario.loaded(runs: 11, timetable: every15)).state, .missed)
+        XCTAssertEqual(job.evaluate(at: "2026-11-14 18:05", Scenario.loaded(runs: 12, timetable: every15)).state, .ok)
     }
 
     func testIntervalJobIsNotMissedRightAfterWaking() {
@@ -268,9 +236,22 @@ final class JobEvaluatorTests: XCTestCase {
         job.evaluate(at: "2026-11-13 22:00", Scenario.loaded(runs: 10, timetable: every15))
         job.evaluate(at: "2026-11-13 22:10", Scenario.loaded(runs: 11, timetable: every15))
 
-        // Time asleep does not count towards the interval.
-        XCTAssertEqual(job.evaluate(at: "2026-11-14 07:05", Scenario.loaded(runs: 11, timetable: every15, awakeSince: "2026-11-14 07:00")).state, .waiting)
+        // Time asleep does not count towards the interval: after waking the job has a full interval again.
+        XCTAssertEqual(job.evaluate(at: "2026-11-14 07:05", Scenario.loaded(runs: 11, timetable: every15, awakeSince: "2026-11-14 07:00")).state, .ok)
+        XCTAssertEqual(job.evaluate(at: "2026-11-14 07:20", Scenario.loaded(runs: 11, timetable: every15, awakeSince: "2026-11-14 07:00")).state, .ok)
         XCTAssertEqual(job.evaluate(at: "2026-11-14 07:21", Scenario.loaded(runs: 11, timetable: every15, awakeSince: "2026-11-14 07:00")).state, .missed)
+    }
+
+    func testIntervalJobSeenOnlyNowAndThenAfterWaking() {
+        let every15 = Timetable(interval: 900)
+        let job = Scenario(grace: 300)
+        job.evaluate(at: "2026-11-13 22:00", Scenario.loaded(runs: 10, timetable: every15))
+        job.evaluate(at: "2026-11-13 22:10", Scenario.loaded(runs: 11, timetable: every15))
+
+        // Woke at 07:00 and ran at 07:10. The run is noticed at 07:12 and counts from then.
+        XCTAssertEqual(job.evaluate(at: "2026-11-14 07:12", Scenario.loaded(runs: 12, timetable: every15, awakeSince: "2026-11-14 07:00")).state, .ok)
+        XCTAssertEqual(job.evaluate(at: "2026-11-14 07:21", Scenario.loaded(runs: 12, timetable: every15, awakeSince: "2026-11-14 07:00")).state, .ok)
+        XCTAssertEqual(job.evaluate(at: "2026-11-14 07:33", Scenario.loaded(runs: 12, timetable: every15, awakeSince: "2026-11-14 07:00")).state, .missed)
     }
 
     func testCalendarRulesDecideWhenATimetableHasBoth() {
@@ -300,17 +281,4 @@ final class JobEvaluatorTests: XCTestCase {
         XCTAssertEqual(Scenario().evaluate(at: "2026-11-14 12:00", Scenario.loaded(runs: 0, exit: .neverExited, timetable: never)).state, .ok)
     }
 
-    // MARK: - Time zone
-
-    func testTimetableIsReadInTheGivenTimeZone() {
-        let job = Scenario()
-        job.calendar = TestClock.calendar(timeZone: "Europe/Helsinki")
-        job.evaluate(at: "2026-11-13 12:00", Scenario.loaded(runs: 3))
-
-        let evaluation = job.evaluate(at: "2026-11-14 02:31", Scenario.loaded(runs: 3))
-
-        // 02:00 in Helsinki is 00:00 UTC in November.
-        XCTAssertEqual(evaluation.expectedRun, TestClock.date("2026-11-14 00:00"))
-        XCTAssertEqual(evaluation.reason, "there is no sign of the run that was due at 2026-11-14 02:00")
-    }
 }

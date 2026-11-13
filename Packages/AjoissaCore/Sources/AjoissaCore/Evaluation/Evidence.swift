@@ -92,12 +92,21 @@ public struct Evidence: Sendable, Equatable {
     /// The machine has been awake without a break since this moment: its last wake, or its start.
     /// A scheduled time that passed while it slept counts from here.
     public var awakeSince: Date?
+    /// When the machine last started. The scheduler's run counts start over then.
+    public var bootedAt: Date?
     public var checks: [CheckOutcome]
 
-    public init(hostReachable: Bool = true, source: SourceEvidence? = nil, awakeSince: Date? = nil, checks: [CheckOutcome] = []) {
+    public init(
+        hostReachable: Bool = true,
+        source: SourceEvidence? = nil,
+        awakeSince: Date? = nil,
+        bootedAt: Date? = nil,
+        checks: [CheckOutcome] = []
+    ) {
         self.hostReachable = hostReachable
         self.source = source
         self.awakeSince = awakeSince
+        self.bootedAt = bootedAt
         self.checks = checks
     }
 }

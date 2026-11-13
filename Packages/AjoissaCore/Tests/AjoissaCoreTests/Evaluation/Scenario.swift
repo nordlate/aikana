@@ -13,13 +13,19 @@ final class Scenario {
         job = Job(id: "job", name: "Job", hostID: "local", source: source, schedule: schedule, grace: grace, notify: true, checks: [])
     }
 
+    /// - Parameter moment: A time on the scenario's own calendar.
     @discardableResult
     func evaluate(at moment: String, _ evidence: Evidence) -> JobEvaluation {
+        evaluate(at: TestClock.date(moment, calendar: calendar), evidence)
+    }
+
+    @discardableResult
+    func evaluate(at now: Date, _ evidence: Evidence) -> JobEvaluation {
         let evaluation = JobEvaluator.evaluate(
             job: job,
             evidence: evidence,
             previous: record,
-            now: TestClock.date(moment, calendar: calendar),
+            now: now,
             calendar: calendar
         )
         record = evaluation.record
@@ -34,6 +40,7 @@ final class Scenario {
         log: String? = nil,
         timetable: Timetable? = daily0200,
         awakeSince: String? = nil,
+        bootedAt: String? = nil,
         checks: [CheckOutcome] = []
     ) -> Evidence {
         Evidence(
@@ -46,6 +53,7 @@ final class Scenario {
                 logModified: log.map { TestClock.date($0) }
             ),
             awakeSince: awakeSince.map { TestClock.date($0) },
+            bootedAt: bootedAt.map { TestClock.date($0) },
             checks: checks
         )
     }

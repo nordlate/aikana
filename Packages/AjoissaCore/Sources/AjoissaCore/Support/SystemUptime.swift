@@ -4,7 +4,12 @@ import Foundation
 public enum SystemUptime {
     /// The later of the last wake from sleep and the last start. `nil` if neither can be read.
     public static func awakeSince() -> Date? {
-        [time(named: "kern.waketime"), time(named: "kern.boottime")].compactMap { $0 }.max()
+        [time(named: "kern.waketime"), bootedAt()].compactMap { $0 }.max()
+    }
+
+    /// When this Mac last started.
+    public static func bootedAt() -> Date? {
+        time(named: "kern.boottime")
     }
 
     /// A kernel value that holds a moment as seconds and microseconds. Zero means it never happened.

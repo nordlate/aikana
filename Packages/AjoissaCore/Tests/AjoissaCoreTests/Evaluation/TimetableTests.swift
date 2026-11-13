@@ -139,6 +139,22 @@ final class TimetableTests: XCTestCase {
         XCTAssertEqual(occurrence.map { TestClock.stamp($0, calendar: helsinki) }, "2026-03-29 04:30")
     }
 
+    /// In Helsinki the clocks go back from 04:00 to 03:00 on 2026-10-25, so 03:30 comes twice: at 00:30 and at
+    /// 01:30 UTC. The job is due the first time.
+    func testTimeThatComesTwiceOnTheDayClocksGoBackIsTheFirstOne() {
+        let helsinki = TestClock.calendar(timeZone: "Europe/Helsinki")
+        let daily = Timetable(calendarRules: [.init(minute: 30, hour: 3)])
+
+        let last = daily.lastCalendarOccurrence(onOrBefore: TestClock.date("2026-10-25 10:00"), calendar: helsinki)
+        XCTAssertEqual(last, TestClock.date("2026-10-25 00:30"))
+
+        // Between the two, the first has passed and the next is tomorrow's, not the repeat.
+        let between = TestClock.date("2026-10-25 01:00")
+        XCTAssertEqual(daily.lastCalendarOccurrence(onOrBefore: between, calendar: helsinki), TestClock.date("2026-10-25 00:30"))
+        XCTAssertEqual(daily.nextCalendarOccurrence(after: between, calendar: helsinki), TestClock.date("2026-10-26 01:30"))
+        XCTAssertEqual(daily.calendarOccurrenceCount(after: TestClock.date("2026-10-24 12:00"), through: TestClock.date("2026-10-25 12:00"), calendar: helsinki), 1)
+    }
+
     // MARK: - Helpers
 
     private func last(_ timetable: Timetable, _ date: String) -> String? {

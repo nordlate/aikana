@@ -123,7 +123,7 @@ final class JobEvaluatorStateTests: XCTestCase {
 
     // MARK: - The record
 
-    func testRecordKeepsChangesOfStateOnly() {
+    func testRecordListsTheVerdictsItSettledOn() {
         let job = Scenario()
         job.evaluate(at: "2026-11-13 12:00", Scenario.loaded(runs: 3))
         job.evaluate(at: "2026-11-13 12:01", Scenario.loaded(runs: 3))
@@ -131,11 +131,26 @@ final class JobEvaluatorStateTests: XCTestCase {
         job.evaluate(at: "2026-11-14 02:32", Scenario.loaded(runs: 3))
         job.evaluate(at: "2026-11-14 02:50", Scenario.loaded(runs: 4))
 
-        XCTAssertEqual(job.record?.transitions.map(\.state), [.waiting, .missed, .ok])
-        XCTAssertEqual(job.record?.transitions.map(\.date), ["2026-11-13 12:00", "2026-11-14 02:31", "2026-11-14 02:50"].map { TestClock.date($0) })
+        // The waiting before the first judged run is not a verdict and is not listed.
+        XCTAssertEqual(job.record?.transitions.map(\.state), [.missed, .ok])
+        XCTAssertEqual(job.record?.transitions.map(\.date), ["2026-11-14 02:31", "2026-11-14 02:50"].map { TestClock.date($0) })
         XCTAssertEqual(job.record?.stateSince, TestClock.date("2026-11-14 02:50"))
         XCTAssertEqual(job.record?.lastEvaluatedAt, TestClock.date("2026-11-14 02:50"))
         XCTAssertEqual(job.record?.reason, "the run due at 2026-11-14 02:00 happened")
+    }
+
+    func testWaitingAndRunningAroundEachRunDoNotFillTheRecord() {
+        let job = Scenario.watchedSinceYesterday()
+
+        for day in 14...20 {
+            job.evaluate(at: "2026-11-\(day) 02:00:30", Scenario.loaded(runs: day - 11))
+            job.evaluate(at: "2026-11-\(day) 02:01:30", Scenario.loaded(runs: day - 10, running: true))
+            job.evaluate(at: "2026-11-\(day) 02:05", Scenario.loaded(runs: day - 10))
+        }
+
+        XCTAssertEqual(job.record?.transitions.map(\.state), [.ok])
+        XCTAssertEqual(job.record?.state, .ok)
+        XCTAssertEqual(job.record?.stateSince, TestClock.date("2026-11-20 02:05"))
     }
 
     func testRecordKeepsALimitedNumberOfChanges() {

@@ -86,6 +86,7 @@ func status(_ arguments: [String]) throws(Stop) {
         locations: LaunchdSearchLocation.standard(homeDirectory: home, userID: getuid())
     )
     let awakeSince = SystemUptime.awakeSince()
+    let bootedAt = SystemUptime.bootedAt()
 
     for job in config.jobs {
         print(job.name == job.id ? job.id : "\(job.id) (\(job.name))")
@@ -96,7 +97,8 @@ func status(_ arguments: [String]) throws(Stop) {
         let observation = collector.observe(label: label)
         let evidence = Evidence(
             source: SourceEvidence(launchd: observation, logModified: FileTimes.latestModification(of: observation.logPaths)),
-            awakeSince: awakeSince
+            awakeSince: awakeSince,
+            bootedAt: bootedAt
         )
         let evaluation = JobEvaluator.evaluate(
             job: job,

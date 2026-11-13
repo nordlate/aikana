@@ -51,11 +51,14 @@ public struct JobRecord: Sendable, Equatable, Codable {
     public var lastRun: Date?
     /// Since when the job's state has been unreadable without a break.
     public var unreadableSince: Date?
+    /// Since when the scheduler has not had the job loaded. While that lasts no run can be expected.
+    public var unavailableSince: Date?
     public var state: JobState
     public var reason: String
     public var stateSince: Date
     public var lastEvaluatedAt: Date
-    /// The most recent changes of state, oldest first.
+    /// The most recent verdicts the job settled on, oldest first. `waiting` and `running` are passing moments
+    /// between verdicts and are not listed.
     public var transitions: [Transition]
 
     public init(
@@ -65,6 +68,7 @@ public struct JobRecord: Sendable, Equatable, Codable {
         lastRunCount: Int? = nil,
         lastRun: Date? = nil,
         unreadableSince: Date? = nil,
+        unavailableSince: Date? = nil,
         state: JobState = .waiting,
         reason: String = "",
         stateSince: Date? = nil,
@@ -77,6 +81,7 @@ public struct JobRecord: Sendable, Equatable, Codable {
         self.lastRunCount = lastRunCount
         self.lastRun = lastRun
         self.unreadableSince = unreadableSince
+        self.unavailableSince = unavailableSince
         self.state = state
         self.reason = reason
         self.stateSince = stateSince ?? watchingSince
@@ -90,7 +95,8 @@ public struct JobEvaluation: Sendable, Equatable {
     public var state: JobState
     /// Why, in a sentence that completes "The job is <state>: …".
     public var reason: String
-    /// The scheduled time the verdict is about, for a job with calendar rules.
+    /// The scheduled time the verdict is about, for a job with calendar rules: the oldest one not yet accounted
+    /// for, or else the latest one that has passed. Checks that ask "since the last expected run" mean this.
     public var expectedRun: Date?
     public var nextRun: Date?
     /// Whether the state differs from the one in the record that was passed in. True for a job seen for the first time.
