@@ -63,25 +63,27 @@ public struct SourceEvidence: Sendable, Equatable {
 }
 
 /// The result of one outcome check, as the evaluation needs it.
-public struct CheckOutcome: Sendable, Equatable {
-    public enum Result: Sendable, Equatable {
+public struct CheckOutcome: Sendable, Equatable, Codable {
+    public enum Result: Sendable, Equatable, Codable {
         case passed
         /// The check ran and what it looked for is not there. The text is written for a person.
         case failed(String)
         /// The check itself could not be carried out.
         case couldNotRun(String)
+        /// The check was left for later, and says nothing yet. The text says why.
+        case skipped(String)
     }
 
     public var result: Result
-    /// Whether passing shows that the job ran since its last expected time: a file newer than that time does,
-    /// a command that merely succeeds does not.
-    public var provesRun: Bool
+    /// When the job is shown to have run, by a check that passed: the time of the file it found, or of the log
+    /// it read. `nil` for a check that shows no run, such as a command that merely succeeds.
+    public var provesRunAt: Date?
     /// More to show a person who asks: the file that was found, or what a command printed.
     public var detail: String?
 
-    public init(result: Result, provesRun: Bool = false, detail: String? = nil) {
+    public init(result: Result, provesRunAt: Date? = nil, detail: String? = nil) {
         self.result = result
-        self.provesRun = provesRun
+        self.provesRunAt = provesRunAt
         self.detail = detail
     }
 }

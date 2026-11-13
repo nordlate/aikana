@@ -3,17 +3,36 @@ import Foundation
 /// What a set of checks is run against.
 public struct CheckContext: Sendable {
     public var now: Date
-    /// The moment "since the last expected run" means: the scheduled time of the run being judged.
+    /// The moment "since the last expected run" means for files: see ``JobEvaluation/checksSince``.
     /// `nil` for a job with no run to expect.
     public var since: Date?
+    /// The moment that tells this run's output from the last one's: see ``JobEvaluation/outputSince``.
+    public var outputSince: Date?
+    /// Whether text found in the log can show that the expected run happened. It can for a run with a
+    /// scheduled time; for a job on an interval the log is only read once a run has been seen anyway.
+    public var logProvesRun: Bool
+    /// Whether the expected run has not been seen yet. Commands are then left for later: a command judges what
+    /// a run left behind, and cannot show that there was one.
+    public var runIsOpen: Bool
     /// The job's own log files, for a `log-pattern` check that names none.
     public var defaultLogPaths: [String]
     /// The calendar and time zone that times in messages are written in.
     public var calendar: Calendar
 
-    public init(now: Date, since: Date?, defaultLogPaths: [String] = [], calendar: Calendar) {
+    public init(
+        now: Date,
+        since: Date?,
+        outputSince: Date? = nil,
+        logProvesRun: Bool = true,
+        runIsOpen: Bool = false,
+        defaultLogPaths: [String] = [],
+        calendar: Calendar
+    ) {
         self.now = now
         self.since = since
+        self.outputSince = outputSince ?? since
+        self.logProvesRun = logProvesRun
+        self.runIsOpen = runIsOpen
         self.defaultLogPaths = defaultLogPaths
         self.calendar = calendar
     }
@@ -21,13 +40,17 @@ public struct CheckContext: Sendable {
 
 /// Carries out a job's outcome checks on the machine the job runs on.
 ///
-/// A check has three results. It passes, it fails (what it looked for is not there), or it could not be
-/// carried out. The last is never reported as a failure: not being able to look says nothing about the job.
+/// A check passes, fails (what it looked for is not there), could not be carried out, or was left for later.
+/// "Could not be carried out" is never reported as a failure: not being able to look says nothing about the job.
 public enum CheckRunner {
     /// How much of a log is read at most. A run that wrote more is judged by the end of what it wrote.
-    static let logReadLimit = 1_000_000
+    static let logReadLimit: Int64 = 1_000_000
+    /// How many bytes before a place in a log are remembered, to notice that the log was rewritten.
+    static let tailLength: Int64 = 64
     /// How much of a command's output is kept to show.
     static let detailLimit = 2000
+    /// How long a command's result is kept for the same run before the command is run again.
+    static let commandRecheckInterval: TimeInterval = 15 * 60
 
     /// - Parameter state: What the checks remembered from the last time, or `nil` the first time.
     /// - Returns: One outcome per check, in order, and the state to remember for next time.
@@ -38,7 +61,7 @@ public enum CheckRunner {
         state: CheckState?
     ) -> (outcomes: [CheckOutcome], state: CheckState) {
         var pass = CheckPass(host: host, context: context, previous: state ?? CheckState())
-        let outcomes = checks.map { pass.run($0) }
+        let outcomes = checks.enumerated().map { pass.run($0.element, index: $0.offset) }
         return (outcomes, pass.state)
     }
 }
@@ -47,10 +70,10 @@ struct CheckPass {
     let host: any HostAccess
     let context: CheckContext
     let previous: CheckState
-    /// The state to keep: only the logs this pass looked at.
+    /// The state to keep: only what this pass looked at.
     var state = CheckState()
-    /// What each log had new, so a log used by two checks is read and marked once.
-    var newLogText: [String: Result<String?, HostAccessError>] = [:]
+    /// What each log had new, so a log used by two checks is read and noted once.
+    var logsRead: [String: LogReading] = [:]
 
     init(host: any HostAccess, context: CheckContext, previous: CheckState) {
         self.host = host
@@ -58,14 +81,14 @@ struct CheckPass {
         self.previous = previous
     }
 
-    mutating func run(_ check: Check) -> CheckOutcome {
+    mutating func run(_ check: Check, index: Int) -> CheckOutcome {
         switch check {
         case let .fileAge(path, maxAge):
             fileAge(path: path, maxAge: maxAge)
         case let .fileSize(path, minBytes):
             fileSize(path: path, minBytes: minBytes)
         case let .command(arguments, timeout):
-            command(arguments: arguments, timeout: timeout)
+            command(arguments: arguments, timeout: timeout, index: index)
         case let .logPattern(path, contains, notContains):
             logPattern(path: path, contains: contains, notContains: notContains)
         }
@@ -94,8 +117,13 @@ struct CheckPass {
         guard newest.modified >= threshold else {
             return CheckOutcome(result: .failed("no file matching \(path) is \(wanted); the newest was written at \(stamp(newest.modified))"))
         }
-        // Only "newer than the scheduled time" shows that this run happened. "Less than a day old" does not.
-        return CheckOutcome(result: .passed, provesRun: maxAge == nil, detail: "\(newest.path) was written at \(stamp(newest.modified))")
+        // Only "newer than the scheduled time" shows that this run happened, and it happened when the file
+        // was written. "Less than a day old" shows nothing about a particular run.
+        return CheckOutcome(
+            result: .passed,
+            provesRunAt: maxAge == nil ? newest.modified : nil,
+            detail: "\(newest.path) was written at \(stamp(newest.modified))"
+        )
     }
 
     private func fileSize(path: String, minBytes: Int64) -> CheckOutcome {
@@ -124,17 +152,42 @@ struct CheckPass {
         } catch {
             return .none(CheckOutcome(result: .couldNotRun(error.message)))
         }
+        guard !files.isEmpty else {
+            return .none(CheckOutcome(result: .failed("no file matches \(path)")))
+        }
         // A file stamped in the future is a clock problem. It must not count as newer than everything.
         let latestBelievable = context.now.addingTimeInterval(JobEvaluator.tolerance)
         guard let newest = files.filter({ $0.modified <= latestBelievable }).max(by: { $0.modified < $1.modified }) else {
-            return .none(CheckOutcome(result: .failed(files.isEmpty ? "no file matches \(path)" : "every file matching \(path) is stamped in the future")))
+            // With every clock reading wrong there is nothing to compare. That is not the job's failure.
+            return .none(CheckOutcome(result: .couldNotRun("every file matching \(path) is stamped in the future, so their ages cannot be told")))
         }
         return .file(newest)
     }
 
     // MARK: - command
 
-    private func command(arguments: [String], timeout: TimeInterval) -> CheckOutcome {
+    private mutating func command(arguments: [String], timeout: TimeInterval, index: Int) -> CheckOutcome {
+        // The place in the list is part of the key, so the same command given twice is kept twice.
+        let key = "\(index) " + arguments.joined(separator: " ")
+        if context.runIsOpen {
+            state.commands[key] = previous.commands[key]
+            return CheckOutcome(result: .skipped("it is run once the job has run"))
+        }
+        if let kept = previous.commands[key], kept.since == context.outputSince {
+            let age = context.now.timeIntervalSince(kept.checkedAt)
+            if age >= 0, age < CheckRunner.commandRecheckInterval {
+                // Nothing has run since the command last judged this run. Asking again so soon would only
+                // run the user's program every time Ajoissa looks.
+                state.commands[key] = kept
+                return kept.outcome
+            }
+        }
+        let outcome = runCommand(arguments: arguments, timeout: timeout)
+        state.commands[key] = CheckState.CommandResult(since: context.outputSince, checkedAt: context.now, outcome: outcome)
+        return outcome
+    }
+
+    private func runCommand(arguments: [String], timeout: TimeInterval) -> CheckOutcome {
         let program = arguments.first ?? ""
         let result: CommandResult
         do {
@@ -155,86 +208,9 @@ struct CheckPass {
         return CheckOutcome(result: .passed, detail: output)
     }
 
-    // MARK: - log-pattern
-
-    private mutating func logPattern(path: String?, contains: String?, notContains: String?) -> CheckOutcome {
-        let paths = path.map { [$0] } ?? context.defaultLogPaths
-        guard !paths.isEmpty else {
-            return CheckOutcome(result: .couldNotRun("the job has no log file of its own; give the check a path"))
-        }
-        guard let since = context.since else {
-            return CheckOutcome(result: .couldNotRun("the log has no expected run to be read from"))
-        }
-        // Every log is looked at before anything is decided, so that each one's length is noted for next time.
-        let found = paths.map { (path: $0, text: newText(in: $0, since: since)) }
-        var text = ""
-        for (path, result) in found {
-            switch result {
-            case let .failure(error):
-                return CheckOutcome(result: .couldNotRun(error.message))
-            case .success(nil):
-                // The log was first looked at after this run wrote to it, so the run's part cannot be told
-                // from what was there before. Like a run from before the watch began, it is not judged.
-                return CheckOutcome(result: .passed, detail: "not read yet: \(path) is read from the next run on")
-            case let .success(new?):
-                text += new
-            }
-        }
-        if let notContains, let line = Self.firstLine(of: text, containing: notContains) {
-            return CheckOutcome(result: .failed("the log contains \"\(notContains)\""), detail: Self.shortened(line))
-        }
-        if let contains, !text.contains(contains) {
-            return CheckOutcome(result: .failed("the log does not contain \"\(contains)\" since \(stamp(since))"))
-        }
-        // Text that had to be written since the scheduled time shows the job ran. Text that is absent does not.
-        return CheckOutcome(result: .passed, provesRun: contains != nil)
-    }
-
-    /// What was written to a log since `since`, and a note of how long the log is now. `nil` when it is not
-    /// known where in the log `since` is.
-    private mutating func newText(in path: String, since: Date) -> Result<String?, HostAccessError> {
-        if let known = newLogText[path] {
-            return known
-        }
-        let result: Result<String?, HostAccessError>
-        do {
-            result = .success(try readNewText(in: path, since: since))
-        } catch {
-            result = .failure(error)
-        }
-        newLogText[path] = result
-        return result
-    }
-
-    private mutating func readNewText(in path: String, since: Date) throws(HostAccessError) -> String? {
-        let file = try host.file(at: path)
-        let size = file?.size ?? 0
-        state.logMarks[path] = CheckState.LogMark(size: size, date: context.now)
-
-        var baseline: CheckState.LogBaseline
-        if let kept = previous.logBaselines[path], kept.since == since {
-            baseline = kept
-        } else if let mark = previous.logMarks[path], mark.date < since {
-            // The last look was before the run: the log's length then is where the run's output starts.
-            baseline = CheckState.LogBaseline(since: since, offset: mark.size)
-        } else if file.map({ $0.modified < since.addingTimeInterval(-JobEvaluator.tolerance) }) ?? true {
-            // Never looked before the run, but the log has not been written since: nothing in it is new.
-            baseline = CheckState.LogBaseline(since: since, offset: size)
-        } else {
-            return nil
-        }
-        if baseline.offset > size {
-            // The log is shorter than it was: it was emptied or replaced, so all of it is new.
-            baseline.offset = 0
-        }
-        state.logBaselines[path] = baseline
-        let data = try host.read(path, from: baseline.offset, limit: CheckRunner.logReadLimit)
-        return String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1) ?? ""
-    }
-
     // MARK: - Wording
 
-    private func stamp(_ date: Date) -> String {
+    func stamp(_ date: Date) -> String {
         let parts = context.calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date)
         return String(
             format: "%04d-%02d-%02d %02d:%02d",
@@ -260,10 +236,5 @@ struct CheckPass {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         return trimmed.count <= CheckRunner.detailLimit ? trimmed : String(trimmed.prefix(CheckRunner.detailLimit)) + "…"
-    }
-
-    static func firstLine(of text: String, containing needle: String) -> String? {
-        guard text.contains(needle) else { return nil }
-        return text.split(whereSeparator: \.isNewline).first { $0.contains(needle) }.map(String.init) ?? needle
     }
 }

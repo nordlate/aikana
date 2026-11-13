@@ -8,6 +8,7 @@ final class FakeHost: HostAccess, @unchecked Sendable {
         var contents: Data
         /// The size to report. A backup of 500 MB does not have to exist to be checked.
         var size: Int64
+        var identity: UInt64
     }
 
     private let lock = NSLock()
@@ -16,19 +17,29 @@ final class FakeHost: HostAccess, @unchecked Sendable {
     private var commandAnswer: Result<CommandResult, CommandError> = .success(CommandResult(exitCode: 0))
     private var recordedCommands: [[String]] = []
     private var recordedReads: [String] = []
+    private var nextIdentity: UInt64 = 100
 
     var commands: [[String]] {
         lock.withLock { recordedCommands }
     }
 
-    /// The paths whose contents were read, in order.
+    /// Every read of file contents, in order, as "path from..<to".
     var reads: [String] {
         lock.withLock { recordedReads }
     }
 
-    func put(_ path: String, modified: String, contents: String = "", size: Int64? = nil) {
-        let data = Data(contents.utf8)
-        lock.withLock { files[path] = File(modified: TestClock.date(modified), contents: data, size: size ?? Int64(data.count)) }
+    /// Writes a file. Writing to a path again keeps it the same file, as appending or rewriting in place
+    /// does, unless `replaced` says a new file took its name, as rotating a log does.
+    func put(_ path: String, modified: String, contents: String = "", size: Int64? = nil, replaced: Bool = false) {
+        put(path, modified: modified, data: Data(contents.utf8), size: size, replaced: replaced)
+    }
+
+    func put(_ path: String, modified: String, data: Data, size: Int64? = nil, replaced: Bool = false) {
+        lock.withLock {
+            nextIdentity += 1
+            let identity = replaced ? nextIdentity : files[path]?.identity ?? nextIdentity
+            files[path] = File(modified: TestClock.date(modified), contents: data, size: size ?? Int64(data.count), identity: identity)
+        }
     }
 
     func remove(_ path: String) {
@@ -48,7 +59,7 @@ final class FakeHost: HostAccess, @unchecked Sendable {
         try refuseIfUnreadable(pattern)
         return lock.withLock {
             files.filter { fnmatch(pattern, $0.key, FNM_PATHNAME) == 0 }
-                .map { HostFile(path: $0.key, modified: $0.value.modified, size: $0.value.size) }
+                .map { HostFile(path: $0.key, modified: $0.value.modified, size: $0.value.size, identity: $0.value.identity) }
                 .sorted { $0.path < $1.path }
         }
     }
@@ -56,16 +67,18 @@ final class FakeHost: HostAccess, @unchecked Sendable {
     func file(at path: String) throws(HostAccessError) -> HostFile? {
         try refuseIfUnreadable(path)
         return lock.withLock {
-            files[path].map { HostFile(path: path, modified: $0.modified, size: $0.size) }
+            files[path].map { HostFile(path: path, modified: $0.modified, size: $0.size, identity: $0.identity) }
         }
     }
 
-    func read(_ path: String, from offset: Int64, limit: Int) throws(HostAccessError) -> Data {
+    func read(_ path: String, range: Range<Int64>) throws(HostAccessError) -> Data {
         try refuseIfUnreadable(path)
         return lock.withLock {
-            recordedReads.append(path)
-            guard let contents = files[path]?.contents, offset < contents.count else { return Data() }
-            return contents.suffix(from: Int(max(offset, 0))).suffix(limit)
+            recordedReads.append("\(path) \(range.lowerBound)..<\(range.upperBound)")
+            guard let contents = files[path]?.contents else { return Data() }
+            let start = min(max(Int(range.lowerBound), 0), contents.count)
+            let end = min(max(Int(range.upperBound), start), contents.count)
+            return contents.subdata(in: start..<end)
         }
     }
 

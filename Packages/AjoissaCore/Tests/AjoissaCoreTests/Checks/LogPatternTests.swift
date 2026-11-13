@@ -3,18 +3,7 @@ import XCTest
 
 /// log-pattern. A log only grows, so the tests follow one through several looks, each with the state the
 /// previous look left.
-final class LogPatternTests: XCTestCase {
-    private var host: FakeHost!
-    private var state: CheckState?
-    private let log = "/var/log/job.log"
-    private let run1 = "2026-11-13 02:00"
-    private let run2 = "2026-11-14 02:00"
-
-    override func setUp() {
-        host = FakeHost()
-        state = nil
-    }
-
+final class LogPatternTests: LogCheckTestCase {
     // MARK: - Only what the run wrote
 
     func testOnlyTextWrittenSinceTheRunIsRead() {
@@ -26,7 +15,7 @@ final class LogPatternTests: XCTestCase {
 
         XCTAssertEqual(
             look(at: "2026-11-14 02:10", since: run2, .logPattern(path: log, contains: "dump complete", notContains: "Traceback")),
-            CheckOutcome(result: .passed, provesRun: true)
+            CheckOutcome(result: .passed, provesRunAt: TestClock.date("2026-11-14 02:03"))
         )
     }
 
@@ -91,6 +80,51 @@ final class LogPatternTests: XCTestCase {
         XCTAssertEqual(look(at: "2026-11-14 02:10", since: run2, check).result, .passed)
     }
 
+    // MARK: - Which run
+
+    /// After a missed run the run in question changes to a time after the last look. The start of the earlier
+    /// run is still known, and reading from there is better than not reading.
+    func testWhenTheRunChangesToOneAfterTheLastLookTheEarlierStartIsUsed() {
+        let check = Check.logPattern(path: log, contains: nil, notContains: "ERROR")
+        host.put(log, modified: "2026-11-12 02:05", contents: "old\n")
+        look(at: "2026-11-13 01:59", since: "2026-11-12 02:00", check)
+        look(at: "2026-11-14 09:00", since: run1, check)
+
+        host.put(log, modified: "2026-11-14 09:01", contents: "old\nERROR: late run failed\n")
+
+        XCTAssertEqual(look(at: "2026-11-14 09:02", since: run2, check).result, .failed("the log contains \"ERROR\""))
+    }
+
+    /// For a job on an interval the run in question is the latest one seen, and stays that until the next.
+    func testOutputOfTheLatestRunIsReadUntilTheNextRunIsSeen() {
+        let check = Check.logPattern(path: log, contains: nil, notContains: "ERROR")
+        host.put(log, modified: "2026-11-14 10:00", contents: "run 1 fine\n")
+        look(at: "2026-11-14 10:14", since: "2026-11-14 10:00", check)
+
+        // The 10:15 run is noticed at 10:16, and wrote an error.
+        host.put(log, modified: "2026-11-14 10:15", contents: "run 1 fine\nERROR in run 2\n")
+        for moment in ["2026-11-14 10:16", "2026-11-14 10:17", "2026-11-14 10:29"] {
+            XCTAssertEqual(look(at: moment, since: "2026-11-14 10:16", check).result, .failed("the log contains \"ERROR\""), moment)
+        }
+
+        // The 10:30 run is fine, and from then on so is the check.
+        host.put(log, modified: "2026-11-14 10:30", contents: "run 1 fine\nERROR in run 2\nrun 3 fine\n")
+        XCTAssertEqual(look(at: "2026-11-14 10:31", since: "2026-11-14 10:31", check).result, .passed)
+    }
+
+    func testWantedTextDoesNotProveARunWhenTheLogCannot() {
+        let check = Check.logPattern(path: log, contains: "done", notContains: nil)
+        host.put(log, modified: "2026-11-13 02:05", contents: "")
+        look(at: "2026-11-14 01:59", since: run1, check)
+        host.put(log, modified: "2026-11-14 02:03", contents: "done\n")
+        var context = CheckContext(now: TestClock.date("2026-11-14 02:10"), since: TestClock.date(run2), calendar: TestClock.utc)
+        context.logProvesRun = false
+
+        let outcome = CheckRunner.run([check], on: host, context: context, state: state).outcomes[0]
+
+        XCTAssertEqual(outcome, CheckOutcome(result: .passed))
+    }
+
     // MARK: - First look
 
     func testFirstLookAtALogNotWrittenSinceTheRunFindsNothingNew() {
@@ -111,10 +145,12 @@ final class LogPatternTests: XCTestCase {
 
         XCTAssertEqual(
             look(at: "2026-11-14 03:00", since: run2, .logPattern(path: log, contains: "done", notContains: "Traceback")),
-            CheckOutcome(result: .passed, provesRun: false, detail: "not read yet: /var/log/job.log is read from the next run on")
+            CheckOutcome(result: .passed, detail: "not read yet: /var/log/job.log is read from the next run on")
         )
-        XCTAssertEqual(state?.logMarks[log], CheckState.LogMark(size: 10, date: TestClock.date("2026-11-14 03:00")))
-        XCTAssertEqual(host.reads, [])
+        XCTAssertEqual(state?.logMarks[log]?.position.offset, 10)
+        XCTAssertEqual(state?.logMarks[log]?.date, TestClock.date("2026-11-14 03:00"))
+        // Only the few bytes that mark where the log ends were read, not the log.
+        XCTAssertEqual(host.reads, ["/var/log/job.log 0..<10"])
     }
 
     func testLogThatDoesNotExist() {
@@ -195,35 +231,24 @@ final class LogPatternTests: XCTestCase {
         )
 
         XCTAssertEqual(result.outcomes.map(\.result), [.passed, .passed])
-        XCTAssertEqual(host.reads, [log])
+        // Where it ends now, whether the start of the run still holds, and the run's text: once each.
+        XCTAssertEqual(Array(host.reads.suffix(3)), ["/var/log/job.log 0..<9", "/var/log/job.log 0..<4", "/var/log/job.log 4..<9"])
+        XCTAssertEqual(host.reads.count, 4)
     }
 
     func testStateKeepsOnlyTheLogsThatWereLookedAt() {
         host.put(log, modified: "2026-11-12 02:05", contents: "old\n")
+        let somewhere = CheckState.LogPosition(offset: 5)
         state = CheckState(
-            logMarks: ["/var/log/gone.log": CheckState.LogMark(size: 5, date: TestClock.date("2026-11-13 12:00"))],
-            logBaselines: ["/var/log/gone.log": CheckState.LogBaseline(since: TestClock.date(run1), offset: 0)]
+            logMarks: ["/var/log/gone.log": CheckState.LogMark(position: somewhere, date: TestClock.date("2026-11-13 12:00"))],
+            logBaselines: ["/var/log/gone.log": CheckState.LogBaseline(since: TestClock.date(run1), position: somewhere)]
         )
 
         look(at: "2026-11-14 01:59", since: run1, .logPattern(path: log, contains: nil, notContains: "x"))
 
         XCTAssertEqual(state?.logMarks.keys.sorted(), [log])
         XCTAssertEqual(state?.logBaselines.keys.sorted(), [log])
-        XCTAssertEqual(state?.logMarks[log], CheckState.LogMark(size: 4, date: TestClock.date("2026-11-14 01:59")))
-    }
-
-    // MARK: - Helpers
-
-    @discardableResult
-    private func look(at moment: String, since: String?, _ check: Check, defaultLogPaths: [String] = []) -> CheckOutcome {
-        let context = CheckContext(
-            now: TestClock.date(moment),
-            since: since.map { TestClock.date($0) },
-            defaultLogPaths: defaultLogPaths,
-            calendar: TestClock.utc
-        )
-        let result = CheckRunner.run([check], on: host, context: context, state: state)
-        state = result.state
-        return result.outcomes[0]
+        XCTAssertEqual(state?.logMarks[log]?.position.offset, 4)
+        XCTAssertEqual(state?.logMarks[log]?.position.tail, Data("old\n".utf8))
     }
 }

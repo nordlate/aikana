@@ -133,6 +133,9 @@ public struct JobEvaluation: Sendable, Equatable {
     /// or for a job on an interval the start of the stretch in which a run must have happened. `nil` for a
     /// job with no run to expect.
     public var checksSince: Date?
+    /// The moment that tells one run's output from the last one's: the scheduled time in question, or for a
+    /// job on an interval the moment its latest run was seen. It stays the same until there is a new run.
+    public var outputSince: Date?
     /// Whether the state is news: it differs from the one in the record that was passed in. True for a job seen
     /// for the first time. A job that comes back from being unreadable or offline to the state it had before
     /// has not changed.

@@ -34,7 +34,17 @@ public enum JobAssessor {
         guard !job.checks.isEmpty, checksApply(first, evidence) else {
             return Assessment(evaluation: first, outcomes: [])
         }
-        let context = CheckContext(now: now, since: first.checksSince, defaultLogPaths: defaultLogPaths, calendar: calendar)
+        let context = CheckContext(
+            now: now,
+            since: first.checksSince,
+            outputSince: first.outputSince,
+            // A job on an interval has no scheduled time for a log line to be newer than.
+            logProvesRun: first.expectedRun != nil,
+            // For a job with a scheduler, a run that has not been seen yet is waited for or missed.
+            runIsOpen: evidence.source != nil && [.waiting, .missed].contains(first.state),
+            defaultLogPaths: defaultLogPaths,
+            calendar: calendar
+        )
         let (outcomes, state) = CheckRunner.run(job.checks, on: host, context: context, state: previous?.checkState)
         evidence.checks = outcomes
         var evaluation = JobEvaluator.evaluate(job: job, evidence: evidence, previous: previous, now: now, calendar: calendar)
@@ -77,6 +87,7 @@ extension CheckOutcome {
         case .passed: "passed"
         case let .failed(message): "failed: \(message)"
         case let .couldNotRun(message): "could not be carried out: \(message)"
+        case let .skipped(message): "not run yet: \(message)"
         }
     }
 }

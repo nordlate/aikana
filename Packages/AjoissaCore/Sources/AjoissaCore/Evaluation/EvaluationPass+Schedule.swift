@@ -11,9 +11,11 @@ extension EvaluationPass {
             return decideWithoutTimetable()
         }
         var open = openRun(timetable)
-        if let due = open, evidence.checks.contains(where: { $0.provesRun && $0.result == .passed }) {
+        if let due = open, let proof = proofOfRun(noEarlierThan: due.addingTimeInterval(-JobEvaluator.tolerance)) {
             // A check shows the job has run since that scheduled time, whether or not the run itself was seen.
-            record.lastRun = Self.later(record.lastRun, due)
+            // The run is credited at the moment the proof is from, so it accounts for every scheduled time up
+            // to then and for none after.
+            record.lastRun = Self.later(record.lastRun, proof)
             open = openRun(timetable)
         }
         expectedRun = open ?? latestDue
@@ -83,8 +85,10 @@ extension EvaluationPass {
     mutating func decideByInterval(_ interval: TimeInterval) -> JobEvaluation {
         // A file or log line newer than this shows a run within the stretch that must have had one.
         intervalWindowStart = now.addingTimeInterval(-interval - job.grace)
-        if evidence.checks.contains(where: { $0.provesRun && $0.result == .passed }) {
-            record.lastRun = now
+        if let proof = proofOfRun(noEarlierThan: .distantPast) {
+            // Credited when the proof is from, not now: a file from the last run must not keep a job that has
+            // since stopped looking alive.
+            record.lastRun = Self.later(record.lastRun, proof)
         }
         let from = intervalStart()
         let deadline = from.addingTimeInterval(interval + job.grace)

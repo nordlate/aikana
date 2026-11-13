@@ -5,11 +5,15 @@ public struct HostFile: Sendable, Equatable {
     public let path: String
     public let modified: Date
     public let size: Int64
+    /// A number that stays the same as long as this is the same file, and differs once the file has been
+    /// replaced by another of the same name. `nil` when the host cannot tell.
+    public let identity: UInt64?
 
-    public init(path: String, modified: Date, size: Int64) {
+    public init(path: String, modified: Date, size: Int64, identity: UInt64? = nil) {
         self.path = path
         self.modified = modified
         self.size = size
+        self.identity = identity
     }
 }
 
@@ -31,12 +35,12 @@ public protocol HostAccess: Sendable {
     /// for the home directory on the host. No match is an empty list, not an error.
     func files(matching pattern: String) throws(HostAccessError) -> [HostFile]
 
-    /// The file at exactly this path, or `nil` if there is none.
+    /// The file at exactly this path, or `nil` if there is none. A link is followed to the file it points at.
     func file(at path: String) throws(HostAccessError) -> HostFile?
 
-    /// The contents of a file from `offset` to its end. If that is more than `limit` bytes, only the last
-    /// `limit` bytes. Empty when the file is shorter than `offset` or does not exist.
-    func read(_ path: String, from offset: Int64, limit: Int) throws(HostAccessError) -> Data
+    /// The bytes of a file in `range`, as far as the file reaches. Empty when the file is shorter than the
+    /// start of the range or does not exist.
+    func read(_ path: String, range: Range<Int64>) throws(HostAccessError) -> Data
 
     /// Runs a program on the host: the first argument is the program, the rest are passed as they are,
     /// without a shell.

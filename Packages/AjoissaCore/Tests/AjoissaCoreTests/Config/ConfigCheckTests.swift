@@ -172,6 +172,18 @@ final class ConfigCheckTests: XCTestCase {
         )
     }
 
+    /// With no scheduler and no fixed times, nothing tells one run's log lines from the next.
+    func testLogPatternNeedsASourceOrFixedTimes() {
+        let check = "checks: [ { type: 'log-pattern', path: '/var/log/x.log', contains: 'done' } ]"
+
+        XCTAssertEqual(
+            ConfigFixture.issues(ConfigFixture.config(job: "id: 'a', schedule: { every: '15m' }, \(check)")),
+            ["jobs[0] (a).checks: cannot include log-pattern for a job with no source and an \"every\" schedule: nothing tells one run's log lines from the next; give the job daily or weekly times, or a source"]
+        )
+        XCTAssertEqual(ConfigFixture.issues(ConfigFixture.config(job: "id: 'a', schedule: { daily: '02:00' }, \(check)")), [])
+        XCTAssertEqual(ConfigFixture.issues(ConfigFixture.config(job: "id: 'a', source: { cron: 'x' }, schedule: { every: '15m' }, \(check)")), [])
+    }
+
     func testBrokenSourceDoesNotAlsoAskForALogPath() {
         let job = "id: 'a', source: { launchd: 'com example' }, checks: [ { type: 'log-pattern', contains: 'done' } ]"
         let issues = ConfigFixture.issues(ConfigFixture.config(job: job))

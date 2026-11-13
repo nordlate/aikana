@@ -150,6 +150,18 @@ struct EvaluationPass {
 
     // MARK: - Parts of a verdict
 
+    /// The latest moment at which a passing check shows the job to have run, if that is no earlier than
+    /// `earliest`. A moment in the future is a clock problem and shows nothing.
+    func proofOfRun(noEarlierThan earliest: Date) -> Date? {
+        let latestBelievable = now.addingTimeInterval(JobEvaluator.tolerance)
+        return evidence.checks
+            .filter { $0.result == .passed }
+            .compactMap(\.provesRunAt)
+            .filter { $0 >= earliest && $0 <= latestBelievable }
+            .max()
+            .map { min($0, now) }
+    }
+
     mutating func verdictOnLastExit() -> JobEvaluation? {
         evidence.source?.lastExit?.problem.map { finish(.failed, "its last run \($0)") }
     }
@@ -224,6 +236,7 @@ struct EvaluationPass {
             expectedRun: expectedRun,
             nextRun: nextRun,
             checksSince: expectedRun ?? intervalWindowStart,
+            outputSince: expectedRun ?? (intervalWindowStart == nil ? nil : record.lastRun ?? record.watchingSince),
             changed: changed,
             record: record
         )

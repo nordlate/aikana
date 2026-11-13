@@ -18,7 +18,7 @@ final class CheckRunnerTests: XCTestCase {
 
         XCTAssertEqual(run(.fileAge(path: reports, maxAge: nil)), CheckOutcome(
             result: .passed,
-            provesRun: true,
+            provesRunAt: TestClock.date("2026-11-14 02:05"),
             detail: "/home/reports/new.md was written at 2026-11-14 02:05"
         ))
     }
@@ -59,7 +59,6 @@ final class CheckRunnerTests: XCTestCase {
 
         XCTAssertEqual(run(.fileAge(path: reports, maxAge: 26 * 3600)), CheckOutcome(
             result: .passed,
-            provesRun: false,
             detail: "/home/reports/a.md was written at 2026-11-13 02:00"
         ))
         XCTAssertEqual(
@@ -87,8 +86,12 @@ final class CheckRunnerTests: XCTestCase {
             .failed("no file matching /home/reports/*.md is newer than 2026-11-14 02:00; the newest was written at 2026-11-13 02:05")
         )
 
+        // With nothing but wrong clock readings there is nothing to compare, which is not the job's failure.
         host.remove("/home/reports/old.md")
-        XCTAssertEqual(run(.fileAge(path: reports, maxAge: nil)).result, .failed("every file matching /home/reports/*.md is stamped in the future"))
+        XCTAssertEqual(
+            run(.fileAge(path: reports, maxAge: nil)).result,
+            .couldNotRun("every file matching /home/reports/*.md is stamped in the future, so their ages cannot be told")
+        )
     }
 
     // MARK: - file-size
@@ -99,7 +102,6 @@ final class CheckRunnerTests: XCTestCase {
 
         XCTAssertEqual(run(.fileSize(path: "/backup/*.tar", minBytes: 500_000_000)), CheckOutcome(
             result: .passed,
-            provesRun: false,
             detail: "/backup/new.tar is 500 MB"
         ))
     }
@@ -142,7 +144,6 @@ final class CheckRunnerTests: XCTestCase {
 
         XCTAssertEqual(run(.command(arguments: ["/usr/bin/verify", "--quick", "a b"], timeout: 30)), CheckOutcome(
             result: .passed,
-            provesRun: false,
             detail: "all good"
         ))
         XCTAssertEqual(host.commands, [["/usr/bin/verify", "--quick", "a b"]])
@@ -188,6 +189,59 @@ final class CheckRunnerTests: XCTestCase {
         XCTAssertNil(run(.command(arguments: ["/usr/bin/true"], timeout: 30)).detail)
     }
 
+    // MARK: - command: not at every look
+
+    func testCommandIsNotRunAgainForTheSameRunWithinAQuarterOfAnHour() {
+        let check = Check.command(arguments: ["/usr/bin/verify"], timeout: 30)
+        host.answerCommands(with: .success(CommandResult(exitCode: 2)))
+        var state: CheckState?
+
+        for moment in ["2026-11-14 03:00", "2026-11-14 03:01", "2026-11-14 03:14"] {
+            let result = CheckRunner.run([check], on: host, context: context(at: moment), state: state)
+            XCTAssertEqual(result.outcomes[0].result, .failed("/usr/bin/verify exited with code 2"), moment)
+            state = result.state
+        }
+        XCTAssertEqual(host.commands.count, 1)
+
+        // After a quarter of an hour it is asked again, and the new answer is the one that counts.
+        host.answerCommands(with: .success(CommandResult(exitCode: 0)))
+        let later = CheckRunner.run([check], on: host, context: context(at: "2026-11-14 03:15"), state: state)
+        XCTAssertEqual(later.outcomes[0].result, .passed)
+        XCTAssertEqual(host.commands.count, 2)
+    }
+
+    func testCommandIsRunAgainAtOnceForANewRun() {
+        let check = Check.command(arguments: ["/usr/bin/verify"], timeout: 30)
+        let first = CheckRunner.run([check], on: host, context: context(at: "2026-11-14 03:00"), state: nil)
+
+        let next = context(at: "2026-11-14 03:01", since: "2026-11-15 02:00")
+        _ = CheckRunner.run([check], on: host, context: next, state: first.state)
+
+        XCTAssertEqual(host.commands.count, 2)
+    }
+
+    func testSameCommandGivenTwiceIsKeptTwice() {
+        let check = Check.command(arguments: ["/usr/bin/verify"], timeout: 30)
+
+        let first = CheckRunner.run([check, check], on: host, context: context(at: "2026-11-14 03:00"), state: nil)
+        _ = CheckRunner.run([check, check], on: host, context: context(at: "2026-11-14 03:01"), state: first.state)
+
+        XCTAssertEqual(host.commands.count, 2)
+        XCTAssertEqual(first.state.commands.count, 2)
+    }
+
+    /// A command judges what a run left behind. Until the run has been seen there is nothing for it to judge.
+    func testCommandIsLeftForLaterWhileTheRunHasNotBeenSeen() {
+        let check = Check.command(arguments: ["/usr/bin/verify"], timeout: 30)
+        var waiting = context(at: "2026-11-14 02:10")
+        waiting.runIsOpen = true
+
+        let result = CheckRunner.run([check], on: host, context: waiting, state: nil)
+
+        XCTAssertEqual(result.outcomes[0].result, .skipped("it is run once the job has run"))
+        XCTAssertEqual(host.commands, [])
+    }
+
     // MARK: - Several checks
 
     func testOutcomesComeBackInTheOrderOfTheChecks() {
@@ -206,12 +260,11 @@ final class CheckRunnerTests: XCTestCase {
 
     // MARK: - Helpers
 
+    private func context(at moment: String, since: String? = "2026-11-14 02:00") -> CheckContext {
+        CheckContext(now: TestClock.date(moment), since: since.map { TestClock.date($0) }, calendar: TestClock.utc)
+    }
+
     private func run(_ check: Check, since: String? = "2026-11-14 02:00") -> CheckOutcome {
-        let context = CheckContext(
-            now: TestClock.date("2026-11-14 03:00"),
-            since: since.map { TestClock.date($0) },
-            calendar: TestClock.utc
-        )
-        return CheckRunner.run([check], on: host, context: context, state: nil).outcomes[0]
+        CheckRunner.run([check], on: host, context: context(at: "2026-11-14 03:00", since: since), state: nil).outcomes[0]
     }
 }

@@ -30,7 +30,7 @@ Ajoissa only reads. On this Mac it runs one command and reads one kind of file:
 - `/bin/launchctl print gui/<your user id>/<label>` or `/bin/launchctl print system/<label>`, for each launchd job in your config. The label is refused unless it is one plain word.
 - The plist files in `~/Library/LaunchAgents`, `/Library/LaunchAgents` and `/Library/LaunchDaemons`, to find each job's timetable and log paths, and the plist launchd says a job was loaded from.
 - The modification time of each job's log files, and when this Mac last woke or started.
-- For the checks you configure: the names, sizes and modification times of the files a `file-age` or `file-size` path matches (never their contents), and the part of a log a `log-pattern` check asks about.
+- For the checks you configure: the names, sizes and modification times of the files a `file-age` or `file-size` path matches (never their contents), and for a `log-pattern` check the part of the log the run wrote, plus the last 64 bytes of the log to recognise it by next time. Those bytes are kept in the history file.
 
 Beyond that it runs only what you tell it to: the program of each `command` check, with the arguments as written and without a shell.
 
@@ -79,9 +79,11 @@ A job can exit with code 0 and still have produced nothing. Checks say what a su
 - **Three results.** A check passes, fails, or could not be carried out (a folder without permission, a command that hangs). The last makes the job `unknown`, never `failed`.
 - **A check can prove a run.** A file newer than the scheduled time, or a wanted line in the log, shows the job ran even when the run itself was not seen.
 - **A failing check does not fail a job whose run still has time.** Yesterday's report is expected to be old at 02:01.
-- **Only what the run wrote.** A log only grows. Ajoissa notes how long each log is every time it looks, and reads from where the log stood before the run. A log it first sees after the run has already written to it is let through once and read properly from the next run on.
+- **Only what the run wrote.** A log only grows. Ajoissa notes where each log ends every time it looks, and reads from where the log stood before the run. A log it first sees after the run has already written to it is let through once and read properly from the next run on. A log that was emptied, rewritten or rotated is noticed and read from its start.
+- **Commands are not run at every look.** A `command` check runs once the job has run, and its result is kept for that run. It is asked again after 15 minutes, and at once when a new run is seen.
 - **Paths** may contain `*`, `?` and `[...]`, and `~/` for the home directory. `**` is not supported.
 - **Checks are skipped** while the job is running, and when the job cannot be looked at or cannot run.
+- **`log-pattern` needs runs it can tell apart.** For a job on an interval it reads the output of the latest run that was seen. A job with no source and an `every` schedule cannot have one; the config refuses it.
 
 ### Limits
 
@@ -92,6 +94,9 @@ A job can exit with code 0 and still have produced nothing. Checks say what a su
 - **A plist edited but not reloaded.** The timetable is read from the file, while launchd keeps the one from when it loaded the job.
 - **Both a day of the month and a weekday** in one launchd calendar entry are read as "both must match".
 - **After the time zone changes**, scheduled times from before the change are read in the new zone.
+- **Paths in checks:** `*` does not match a name that starts with a dot, as in a shell. A `[` meant literally cannot be combined with a wildcard. A pattern that matches more than 10000 files is refused.
+- **Long logs:** only the last megabyte of what a run wrote is read.
+- **Shared logs:** lines another job writes to the same log count as this run's.
 
 ## Layout
 

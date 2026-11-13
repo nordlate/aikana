@@ -4,8 +4,8 @@ import XCTest
 /// Checks, unreadable state, offline hosts and what the record keeps.
 final class JobEvaluatorStateTests: XCTestCase {
     private let passed = CheckOutcome(result: .passed)
-    private let fileIsNew = CheckOutcome(result: .passed, provesRun: true)
-    private let fileIsOld = CheckOutcome(result: .failed("no file in ~/Reports is newer than 2026-11-14 02:00"), provesRun: true)
+    private let fileIsNew = CheckOutcome(result: .passed, provesRunAt: TestClock.date("2026-11-14 02:04"))
+    private let fileIsOld = CheckOutcome(result: .failed("no file in ~/Reports is newer than 2026-11-14 02:00"))
     private let tooSmall = CheckOutcome(result: .failed("the backup is 3 KB, less than 500 MB"))
     private let unreachable = CheckOutcome(result: .couldNotRun("the check timed out after 30s"))
 
@@ -16,6 +16,35 @@ final class JobEvaluatorStateTests: XCTestCase {
 
         // No run was seen, but the file it writes is newer than its scheduled time.
         XCTAssertEqual(job.evaluate(at: "2026-11-14 03:00", Scenario.loaded(runs: 3, checks: [fileIsNew])).state, .ok)
+    }
+
+    func testProofFromBeforeTheScheduledTimeOrFromTheFutureIsNoProof() {
+        let fromYesterday = CheckOutcome(result: .passed, provesRunAt: TestClock.date("2026-11-13 02:04"))
+        let fromTheFuture = CheckOutcome(result: .passed, provesRunAt: TestClock.date("2026-11-14 09:00"))
+        let failedButDated = CheckOutcome(result: .failed("no"), provesRunAt: TestClock.date("2026-11-14 02:04"))
+
+        for check in [fromYesterday, fromTheFuture, failedButDated] {
+            let job = Scenario.watchedSinceYesterday()
+            XCTAssertNotEqual(job.evaluate(at: "2026-11-14 03:00", Scenario.loaded(runs: 3, checks: [check])).state, .ok)
+        }
+    }
+
+    /// The proof is from 02:04, so it accounts for the 02:00 run and for nothing later.
+    func testProvenRunIsCreditedWhenTheProofIsFrom() {
+        let hourly = Timetable(calendarRules: [.init(minute: 0)])
+        let job = Scenario()
+        job.evaluate(at: "2026-11-14 01:30", Scenario.loaded(runs: nil, timetable: hourly))
+        let proof = CheckOutcome(result: .passed, provesRunAt: TestClock.date("2026-11-14 02:04"))
+
+        XCTAssertEqual(job.evaluate(at: "2026-11-14 02:10", Scenario.loaded(runs: nil, timetable: hourly, checks: [proof])).state, .ok)
+        XCTAssertEqual(job.evaluate(at: "2026-11-14 03:31", Scenario.loaded(runs: nil, timetable: hourly, checks: [proof])).state, .missed)
+    }
+
+    func testSkippedCheckSaysNothing() {
+        let job = Scenario.watchedSinceYesterday()
+        let skipped = CheckOutcome(result: .skipped("it is run once the job has run"))
+
+        XCTAssertEqual(job.evaluate(at: "2026-11-14 02:05", Scenario.loaded(runs: 4, checks: [skipped])).state, .ok)
     }
 
     func testCheckThatMerelyPassesDoesNotStandInForTheRun() {
