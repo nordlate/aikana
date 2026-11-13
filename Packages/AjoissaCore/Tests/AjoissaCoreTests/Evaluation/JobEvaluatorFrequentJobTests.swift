@@ -48,6 +48,58 @@ final class JobEvaluatorFrequentJobTests: XCTestCase {
         XCTAssertLessThan(Date().timeIntervalSince(started), 0.2)
     }
 
+    // MARK: - Runs that last long
+
+    /// An hourly job whose runs take 70 minutes. launchd does not start a job that is still running, so every
+    /// second scheduled time has no run of its own. That is not a missed run.
+    func testRunStillInProgressAccountsForTheScheduledTimeItRunsThrough() {
+        let hourly = Timetable(calendarRules: [.init(minute: 0)])
+        let job = Scenario()
+        job.evaluate(at: "2026-11-14 01:30", Scenario.loaded(runs: 5, timetable: hourly))
+        var states: [JobState] = []
+
+        // Runs from 02:00 to 03:10 and from 04:00 to 05:10, looked at every ten minutes.
+        for minute in stride(from: 120, through: 330, by: 10) {
+            let running = (120..<190).contains(minute) || (240..<310).contains(minute)
+            let runs = minute < 120 ? 5 : (minute < 240 ? 6 : 7)
+            let moment = String(format: "2026-11-14 %02d:%02d", minute / 60, minute % 60)
+            states.append(job.evaluate(at: moment, Scenario.loaded(runs: runs, running: running, timetable: hourly)).state)
+        }
+
+        XCTAssertFalse(states.contains(.missed), "\(states)")
+        XCTAssertFalse(states.contains(.waiting), "\(states)")
+        XCTAssertEqual(Set(states), [.running, .ok])
+    }
+
+    func testIntervalJobWithARunLongerThanItsIntervalIsNotMissedWhenItEnds() {
+        let hourly = Timetable(interval: 3600)
+        let job = Scenario()
+        job.evaluate(at: "2026-11-14 09:50", Scenario.loaded(runs: 5, timetable: hourly))
+        XCTAssertEqual(job.evaluate(at: "2026-11-14 10:01", Scenario.loaded(runs: 6, running: true, timetable: hourly)).state, .running)
+        XCTAssertEqual(job.evaluate(at: "2026-11-14 11:44", Scenario.loaded(runs: 6, running: true, timetable: hourly)).state, .running)
+
+        // The run ended at 11:45, long after the interval from its start was over.
+        XCTAssertEqual(job.evaluate(at: "2026-11-14 11:46", Scenario.loaded(runs: 6, timetable: hourly)).state, .ok)
+        XCTAssertEqual(job.evaluate(at: "2026-11-14 13:14", Scenario.loaded(runs: 6, timetable: hourly)).state, .ok)
+        XCTAssertEqual(job.evaluate(at: "2026-11-14 13:16", Scenario.loaded(runs: 6, timetable: hourly)).state, .missed)
+    }
+
+    func testOverdueIntervalJobStaysMissedThroughAWake() {
+        let hourly = Timetable(interval: 3600)
+        let job = Scenario()
+        job.evaluate(at: "2026-11-14 09:59", Scenario.loaded(runs: 5, timetable: hourly))
+        job.evaluate(at: "2026-11-14 10:00", Scenario.loaded(runs: 6, timetable: hourly))
+        XCTAssertEqual(job.evaluate(at: "2026-11-14 11:31", Scenario.loaded(runs: 6, timetable: hourly)).state, .missed)
+        job.evaluate(at: "2026-11-14 11:39", Scenario.loaded(runs: 6, timetable: hourly))
+
+        // Asleep from 11:40 to 11:45. Five minutes of sleep do not undo ninety minutes without a run.
+        for moment in ["2026-11-14 11:50", "2026-11-14 12:30", "2026-11-14 13:16"] {
+            let evaluation = job.evaluate(at: moment, Scenario.loaded(runs: 6, timetable: hourly, awakeSince: "2026-11-14 11:45"))
+            XCTAssertEqual(evaluation.state, .missed, moment)
+            XCTAssertFalse(evaluation.changed, moment)
+        }
+    }
+
     // MARK: - Runs nobody scheduled
 
     func testRunStartedByHandDoesNotStandInForTheScheduledOne() {

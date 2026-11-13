@@ -17,6 +17,14 @@ public enum JobState: String, Sendable, Equatable, Codable, CaseIterable {
     case unknown
     case hostOffline
 
+    /// Whether the state says nothing about the job itself, only that it could not be looked at.
+    public var isUnreadable: Bool {
+        switch self {
+        case .unknown, .stale, .hostOffline: true
+        case .ok, .running, .waiting, .failed, .missed: false
+        }
+    }
+
     /// Whether the state means something is wrong with the job itself.
     public var isProblem: Bool {
         switch self {
@@ -53,12 +61,22 @@ public struct JobRecord: Sendable, Equatable, Codable {
     public var unreadableSince: Date?
     /// Since when the scheduler has not had the job loaded. While that lasts no run can be expected.
     public var unavailableSince: Date?
+    /// The scheduled time that is waited for or missed, and the moment its grace counts from. That moment is
+    /// fixed when the scheduled time is first found open, so that a later wake cannot give it more time.
+    public var openRun: Date?
+    public var openRunGraceFrom: Date?
+    /// For a job on an interval: the moment the interval is counted from. It moves on with each run that is
+    /// seen, and by the length of each sleep.
+    public var intervalFrom: Date?
+    /// The state the job was in before its state became unreadable or its host went offline. Coming back to the
+    /// same state is not news.
+    public var stateBeforeUnreadable: JobState?
     public var state: JobState
     public var reason: String
     public var stateSince: Date
     public var lastEvaluatedAt: Date
-    /// The most recent verdicts the job settled on, oldest first. `waiting` and `running` are passing moments
-    /// between verdicts and are not listed.
+    /// The most recent verdicts the job settled on, oldest first. `waiting`, `running` and `unknown` are passing
+    /// moments between verdicts and are not listed, and a verdict is not listed twice in a row.
     public var transitions: [Transition]
 
     public init(
@@ -69,6 +87,10 @@ public struct JobRecord: Sendable, Equatable, Codable {
         lastRun: Date? = nil,
         unreadableSince: Date? = nil,
         unavailableSince: Date? = nil,
+        openRun: Date? = nil,
+        openRunGraceFrom: Date? = nil,
+        intervalFrom: Date? = nil,
+        stateBeforeUnreadable: JobState? = nil,
         state: JobState = .waiting,
         reason: String = "",
         stateSince: Date? = nil,
@@ -82,6 +104,10 @@ public struct JobRecord: Sendable, Equatable, Codable {
         self.lastRun = lastRun
         self.unreadableSince = unreadableSince
         self.unavailableSince = unavailableSince
+        self.openRun = openRun
+        self.openRunGraceFrom = openRunGraceFrom
+        self.intervalFrom = intervalFrom
+        self.stateBeforeUnreadable = stateBeforeUnreadable
         self.state = state
         self.reason = reason
         self.stateSince = stateSince ?? watchingSince
@@ -99,7 +125,9 @@ public struct JobEvaluation: Sendable, Equatable {
     /// for, or else the latest one that has passed. Checks that ask "since the last expected run" mean this.
     public var expectedRun: Date?
     public var nextRun: Date?
-    /// Whether the state differs from the one in the record that was passed in. True for a job seen for the first time.
+    /// Whether the state is news: it differs from the one in the record that was passed in. True for a job seen
+    /// for the first time. A job that comes back from being unreadable or offline to the state it had before
+    /// has not changed.
     public var changed: Bool
     /// The record to keep for the next evaluation.
     public var record: JobRecord

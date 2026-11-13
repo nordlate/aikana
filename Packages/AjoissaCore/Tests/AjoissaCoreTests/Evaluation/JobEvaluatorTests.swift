@@ -172,6 +172,18 @@ final class JobEvaluatorTests: XCTestCase {
         XCTAssertEqual(Scenario().evaluate(at: "2026-11-14 12:00", Scenario.loaded(runs: 7, exit: .code(1))).state, .failed)
     }
 
+    /// First seen half a minute after the scheduled time. The run may already be done and in the count the
+    /// watch starts from, so its absence afterwards proves nothing.
+    func testFirstEvaluationJustAfterTheScheduledTimeDoesNotJudgeIt() {
+        let job = Scenario()
+        job.evaluate(at: "2026-11-14 02:00:30", Scenario.loaded(runs: 8))
+
+        let evaluation = job.evaluate(at: "2026-11-14 02:31", Scenario.loaded(runs: 8))
+
+        XCTAssertEqual(evaluation.state, .waiting)
+        XCTAssertEqual(evaluation.reason, "the run due at 2026-11-14 02:00 was before Ajoissa started watching; the next run is due at 2026-11-15 02:00")
+    }
+
     func testFirstEvaluationJustBeforeTheScheduledTimeJudgesIt() {
         let job = Scenario()
         job.evaluate(at: "2026-11-14 01:59:30", Scenario.loaded(runs: 7))

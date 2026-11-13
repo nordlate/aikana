@@ -27,12 +27,13 @@ public enum JobEvaluator {
     ///   - now: The moment of evaluation.
     ///   - calendar: The calendar and time zone the job's timetable is read in.
     public static func evaluate(job: Job, evidence: Evidence, previous: JobRecord?, now: Date, calendar: Calendar) -> JobEvaluation {
-        var pass = Pass(job: job, evidence: evidence, previous: previous, now: now, calendar: calendar)
+        var pass = EvaluationPass(job: job, evidence: evidence, previous: previous, now: now, calendar: calendar)
         return pass.run()
     }
 }
 
-private struct Pass {
+/// One evaluation of one job. Its parts are spread over a few files; all of them are internal to the engine.
+struct EvaluationPass {
     let job: Job
     let evidence: Evidence
     let previous: JobRecord?
@@ -71,7 +72,7 @@ private struct Pass {
         if record.unavailableSince != nil {
             // The job could not run while it was not loaded, so nothing from that time can have been missed.
             record.unavailableSince = nil
-            record.watchingSince = now
+            startWatchOver()
         }
         guard let timetable = currentTimetable() else {
             return finishUnreadable("its timetable could not be read")
@@ -92,7 +93,7 @@ private struct Pass {
     // MARK: - The timetable
 
     /// The timetable to judge by, or `nil` when there should be one and it is not known.
-    private mutating func currentTimetable() -> Timetable? {
+    mutating func currentTimetable() -> Timetable? {
         // A schedule stated in the config wins over the one read from the scheduler. When the scheduler's could
         // not be read this time, the one it had last time is the best there is: assuming "no timetable" would
         // call a job fine that may be overdue.
@@ -101,160 +102,24 @@ private struct Pass {
         }
         if let known = record.timetable, known != timetable {
             // A run that was due under the new timetable before it existed cannot have been missed.
-            record.watchingSince = now
+            startWatchOver()
         }
         record.timetable = timetable
         return timetable
     }
 
-    // MARK: - What is known about runs
-
-    /// Updates the record with what the evidence says about when the job last ran.
-    private mutating func noteRuns(_ timetable: Timetable) {
-        guard let source = evidence.source else { return }
-        var latest = record.lastRun
-        if let count = source.runCount {
-            if let earlierCount = record.lastRunCount, let earlierDate = record.lastObservedAt {
-                // The count starts over when the machine restarts or the job is reloaded. After a restart every
-                // run it counts is new, even if the number happens to be what it was. Without one, a lower
-                // number means a reload, and again every run it counts is new.
-                let restarted = evidence.bootedAt.map { $0 > earlierDate } ?? false
-                let started = restarted || count < earlierCount ? count : count - earlierCount
-                if started > 0 {
-                    latest = Self.later(latest, creditedRun(started: started, since: earlierDate, timetable: timetable))
-                }
-            }
-            record.lastRunCount = count
-            record.lastObservedAt = now
-        }
-        // A timestamp from the future is a clock problem and proves nothing. Treating it as "now" would make it
-        // count as a fresh run at every evaluation, so it is left out.
-        let latestBelievable = now.addingTimeInterval(JobEvaluator.tolerance)
-        for case let moment? in [source.lastRunStarted, source.logModified] where moment <= latestBelievable {
-            latest = Self.later(latest, min(moment, now))
-        }
-        record.lastRun = latest
-    }
-
-    /// The moment to credit for runs that started some time after `since`, when the count was last read.
-    ///
-    /// All that is certain is that they started after `since`. Two things narrow it down. Nothing runs while the
-    /// machine is asleep or off, so if it woke in between, they started after the wake. And if as many runs
-    /// started as were scheduled in that time, none of the scheduled ones is missing, and the latest scheduled
-    /// time can be credited. Scheduled times that passed during sleep are made up for by one run on wake, so
-    /// together they count as one.
-    private func creditedRun(started: Int, since: Date, timetable: Timetable) -> Date {
-        if timetable.calendarRules.isEmpty {
-            // An interval has no scheduled times to tell apart. Crediting the moment the run was noticed can be
-            // late by the time between two looks, which only delays a verdict; crediting `since` could be early
-            // by as much, which would raise a false alarm.
-            return now
-        }
-        let woke = evidence.awakeSince.flatMap { $0 > since && $0 <= now ? $0 : nil }
-        let earliest = woke ?? since
-        let sleptThroughOne = woke != nil
-            && (timetable.nextCalendarOccurrence(after: since, calendar: calendar).map { $0 <= earliest } ?? false)
-        // Counting stops as soon as it is clear that more were scheduled than started.
-        let scheduledAwake = timetable.calendarOccurrenceCount(after: earliest, through: now, calendar: calendar, limit: started + 1)
-        let scheduled = scheduledAwake + (sleptThroughOne ? 1 : 0)
-        guard scheduled > 0, started >= scheduled,
-              let latestDue = timetable.lastCalendarOccurrence(onOrBefore: now, calendar: calendar) else {
-            return earliest
-        }
-        return max(earliest, latestDue)
-    }
-
-    private static func later(_ first: Date?, _ second: Date?) -> Date? {
-        guard let first else { return second }
-        guard let second else { return first }
-        return max(first, second)
-    }
-
-    // MARK: - Calendar rules
-
-    private mutating func decideByCalendar(_ timetable: Timetable) -> JobEvaluation {
-        let latestDue = timetable.lastCalendarOccurrence(onOrBefore: now, calendar: calendar)
-        nextRun = timetable.nextCalendarOccurrence(after: now, calendar: calendar)
-        guard latestDue != nil || nextRun != nil else {
-            // Rules that never match, such as 30 February.
-            return decideWithoutTimetable()
-        }
-        var open = openRun(timetable)
-        if let due = open, evidence.checks.contains(where: { $0.provesRun && $0.result == .passed }) {
-            // A check shows the job has run since that scheduled time, whether or not the run itself was seen.
-            record.lastRun = Self.later(record.lastRun, due)
-            open = openRun(timetable)
-        }
-        expectedRun = open ?? latestDue
-        if evidence.source?.isRunning == true {
-            return finish(.running, "it is running now")
-        }
-        if let due = open {
-            // A time that passed while the machine slept is made up for on wake, so the grace starts there.
-            let deadline = max(due, evidence.awakeSince ?? due).addingTimeInterval(job.grace)
-            if now > deadline {
-                return finish(.missed, "there is no sign of the run that was due at \(stamp(due))")
-            }
-            // The run still has time. An earlier run that went wrong is the latest news until it shows up.
-            return verdictOnLastExit()
-                ?? finish(.waiting, "the run due at \(stamp(due)) has not been seen yet; it has until \(stamp(deadline))")
-        }
-        if let problem = verdictOnLastExit() ?? verdictOnChecks() {
-            return problem
-        }
-        guard let latestDue, let lastRun = record.lastRun, lastRun >= latestDue.addingTimeInterval(-JobEvaluator.tolerance) else {
-            // Nothing is open, yet no run is known for the latest scheduled time: it was before the watch began.
-            let due = latestDue.map { "the run due at \(stamp($0)) was before Ajoissa started watching" } ?? "no run has been due yet"
-            let next = nextRun.map { "; the next run is due at \(stamp($0))" } ?? ""
-            return finish(.waiting, due + next)
-        }
-        return finish(.ok, "the run due at \(stamp(latestDue)) happened")
-    }
-
-    /// The oldest scheduled time that has passed, was due while the job was being watched, and has no run to
-    /// account for it.
-    private func openRun(_ timetable: Timetable) -> Date? {
-        // A run accounts for every scheduled time up to the moment it was seen, give or take the tolerance.
-        let accountedFor = (record.lastRun ?? .distantPast).addingTimeInterval(JobEvaluator.tolerance)
-        // The occurrence search is strict, so step just before the first moment that is judged.
-        let watched = record.watchingSince.addingTimeInterval(-JobEvaluator.tolerance - 1)
-        guard let due = timetable.nextCalendarOccurrence(after: max(accountedFor, watched), calendar: calendar), due <= now else {
-            return nil
-        }
-        return due
-    }
-
-    // MARK: - Interval
-
-    private mutating func decideByInterval(_ interval: TimeInterval) -> JobEvaluation {
-        if evidence.checks.contains(where: { $0.provesRun && $0.result == .passed }) {
-            record.lastRun = now
-        }
-        if evidence.source?.isRunning == true {
-            return finish(.running, "it is running now")
-        }
-        // The interval is counted from the last run that was seen. Time asleep does not count towards it, and
-        // neither does time before anyone was watching.
-        let from = [record.lastRun, record.watchingSince, evidence.awakeSince].compactMap { $0 }.max() ?? now
-        let deadline = from.addingTimeInterval(interval + job.grace)
-        if now > deadline {
-            return finish(.missed, "there is no sign of a run since \(stamp(from))")
-        }
-        if let problem = verdictOnLastExit() {
-            return problem
-        }
-        // A run from long before the watch began says nothing about whether the job still runs.
-        let earliestRelevant = record.watchingSince.addingTimeInterval(-interval - job.grace)
-        guard let lastRun = record.lastRun, lastRun >= earliestRelevant else {
-            return finish(.waiting, "no run has been seen yet; one is expected by \(stamp(deadline))")
-        }
-        return verdictOnChecks() ?? finish(.ok, "it last ran around \(stamp(lastRun)); the next run is expected by \(stamp(deadline))")
+    /// From now on is all that is judged: what was open or counted before no longer applies.
+    mutating func startWatchOver() {
+        record.watchingSince = now
+        record.openRun = nil
+        record.openRunGraceFrom = nil
+        record.intervalFrom = nil
     }
 
     // MARK: - No scheduler, or no timetable
 
     /// A job with no scheduler to ask is judged by its checks alone, once its latest run has had its time.
-    private mutating func decideFromChecksAlone(_ timetable: Timetable) -> JobEvaluation {
+    mutating func decideFromChecksAlone(_ timetable: Timetable) -> JobEvaluation {
         let awakeSince = evidence.awakeSince ?? .distantPast
         let deadline: Date
         if let due = timetable.lastCalendarOccurrence(onOrBefore: now, calendar: calendar) {
@@ -272,7 +137,7 @@ private struct Pass {
     }
 
     /// A job that runs on demand or on some event has no run to wait for. Only its last result can be judged.
-    private mutating func decideWithoutTimetable() -> JobEvaluation {
+    mutating func decideWithoutTimetable() -> JobEvaluation {
         if evidence.source?.isRunning == true {
             return finish(.running, "it is running now")
         }
@@ -281,12 +146,12 @@ private struct Pass {
 
     // MARK: - Parts of a verdict
 
-    private mutating func verdictOnLastExit() -> JobEvaluation? {
+    mutating func verdictOnLastExit() -> JobEvaluation? {
         evidence.source?.lastExit?.problem.map { finish(.failed, "its last run \($0)") }
     }
 
     /// The verdict the checks force, if any: a failed check, or one that could not be carried out.
-    private mutating func verdictOnChecks() -> JobEvaluation? {
+    mutating func verdictOnChecks() -> JobEvaluation? {
         for check in evidence.checks {
             if case let .failed(message) = check.result {
                 return finish(.failed, message)
@@ -300,7 +165,7 @@ private struct Pass {
         return nil
     }
 
-    private func stamp(_ date: Date) -> String {
+    func stamp(_ date: Date) -> String {
         let parts = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date)
         return String(
             format: "%04d-%02d-%02d %02d:%02d",
@@ -311,7 +176,7 @@ private struct Pass {
     // MARK: - Finishing
 
     /// The state could not be read. That is its own state, and after long enough a problem of its own.
-    private mutating func finishUnreadable(_ reason: String) -> JobEvaluation {
+    mutating func finishUnreadable(_ reason: String) -> JobEvaluation {
         let since = record.unreadableSince ?? now
         record.unreadableSince = since
         if now.timeIntervalSince(since) >= JobEvaluator.staleAfter {
@@ -320,14 +185,26 @@ private struct Pass {
         return finish(.unknown, reason)
     }
 
-    private mutating func finish(_ state: JobState, _ reason: String) -> JobEvaluation {
-        let changed = previous?.state != state
-        if changed {
+    mutating func finish(_ state: JobState, _ reason: String) -> JobEvaluation {
+        let differs = previous?.state != state
+        if differs {
             record.stateSince = now
         }
-        // `waiting` and `running` come and go around every run. Listing them would push the verdicts that
-        // matter out of the record within days.
-        if state != .waiting, state != .running, record.transitions.last?.state != state {
+        var changed = differs
+        if let before = previous?.state {
+            if before.isUnreadable, !state.isUnreadable {
+                // Back from not being able to look. Finding the job as it was left is not news.
+                changed = state != record.stateBeforeUnreadable
+            } else if !before.isUnreadable, state.isUnreadable {
+                record.stateBeforeUnreadable = before
+            }
+        }
+        if !state.isUnreadable {
+            record.stateBeforeUnreadable = nil
+        }
+        // `waiting`, `running` and `unknown` come and go. Listing them would push the verdicts that matter out
+        // of the record within days.
+        if ![.waiting, .running, .unknown].contains(state), record.transitions.last?.state != state {
             record.transitions.append(JobRecord.Transition(date: now, state: state, reason: reason))
             record.transitions.removeFirst(max(0, record.transitions.count - JobEvaluator.transitionLimit))
         }

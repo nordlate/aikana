@@ -117,6 +117,47 @@ final class JobEvaluatorStateTests: XCTestCase {
         XCTAssertEqual(job.record?.watchingSince, before?.watchingSince)
     }
 
+    /// One look that fails must not announce the same miss twice.
+    func testComingBackFromUnreadableToTheSameStateIsNotNews() {
+        let job = Scenario.watchedSinceYesterday()
+        let unreadable = Evidence(source: SourceEvidence(availability: .unknown(reason: "launchctl did not answer in time")))
+
+        XCTAssertTrue(job.evaluate(at: "2026-11-14 02:31", Scenario.loaded(runs: 3)).changed)
+        let between = job.evaluate(at: "2026-11-14 02:32", unreadable)
+        XCTAssertEqual(between.state, .unknown)
+        XCTAssertTrue(between.changed)
+        let again = job.evaluate(at: "2026-11-14 02:33", Scenario.loaded(runs: 3))
+        XCTAssertEqual(again.state, .missed)
+        XCTAssertFalse(again.changed)
+
+        XCTAssertEqual(job.record?.transitions.map(\.state), [.ok, .missed])
+    }
+
+    func testComingBackFromUnreadableToAnotherStateIsNews() {
+        let job = Scenario.watchedSinceYesterday()
+        let unreadable = Evidence(source: SourceEvidence(availability: .unknown(reason: "launchctl did not answer in time")))
+        job.evaluate(at: "2026-11-14 02:31", Scenario.loaded(runs: 3))
+        job.evaluate(at: "2026-11-14 02:32", unreadable)
+        job.evaluate(at: "2026-11-14 02:33", unreadable)
+
+        let recovered = job.evaluate(at: "2026-11-14 02:40", Scenario.loaded(runs: 4))
+
+        XCTAssertEqual(recovered.state, .ok)
+        XCTAssertTrue(recovered.changed)
+    }
+
+    func testComingBackFromAnOfflineHostToTheSameStateIsNotNews() {
+        let job = Scenario.watchedSinceYesterday()
+        job.evaluate(at: "2026-11-14 02:31", Scenario.loaded(runs: 3))
+        XCTAssertTrue(job.evaluate(at: "2026-11-14 03:00", Evidence(hostReachable: false)).changed)
+
+        let back = job.evaluate(at: "2026-11-14 09:00", Scenario.loaded(runs: 3))
+
+        XCTAssertEqual(back.state, .missed)
+        XCTAssertFalse(back.changed)
+        XCTAssertEqual(job.record?.transitions.map(\.state), [.ok, .missed, .hostOffline, .missed])
+    }
+
     func testOnlyFailedMissedAndStaleAreProblems() {
         XCTAssertEqual(JobState.allCases.filter(\.isProblem), [.failed, .missed, .stale])
     }

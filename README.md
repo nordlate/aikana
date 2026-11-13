@@ -57,6 +57,8 @@ Things worth knowing:
 - **Grace** (`grace` in the config, 30 minutes by default) is how long after its scheduled time a run may still appear before it counts as missed.
 - **Sleep.** launchd makes up for scheduled times that passed while the Mac slept with one run on wake. The grace period then counts from the wake, and that one run accounts for all of them, so a job is not reported as missed the moment the lid opens after a weekend.
 - **Jobs on an interval** have no scheduled times. They are missed when the interval plus the grace has passed since the last run that was seen. Time asleep does not count.
+- **A wake does not undo a miss.** Whether a scheduled time passed during sleep is settled when it is first found open. Waking the Mac later gives a run that was already missed no new grace period.
+- **A run in progress counts.** launchd does not start a job that is still running, so a long run accounts for a scheduled time it runs through.
 - **Nothing is judged in hindsight.** A run that was due before Ajoissa first saw the job, or before its timetable changed, is not called missed. Evidence that it did happen is still believed.
 - **History** is kept in `~/Library/Application Support/Ajoissa/history.json` (or the file `AJOISSA_HISTORY` names). launchd keeps no history of its own, so this file is what makes "the run count went up since last time" possible. A history file that cannot be read stops Ajoissa instead of being replaced.
 

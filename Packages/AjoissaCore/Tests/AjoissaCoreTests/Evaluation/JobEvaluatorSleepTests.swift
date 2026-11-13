@@ -68,6 +68,39 @@ final class JobEvaluatorSleepTests: XCTestCase {
         XCTAssertEqual(missed.reason, "there is no sign of the run that was due at 2026-11-14 02:00")
     }
 
+    /// Once a run is missed, waking the Mac again must not give it a new grace period. Nothing was slept
+    /// through after 02:00: the Mac was awake then and the run did not come.
+    func testWakeAfterARunWasAlreadyMissedChangesNothing() {
+        let job = Scenario.watchedSinceYesterday()
+        XCTAssertEqual(job.evaluate(at: "2026-11-14 02:00:30", Scenario.loaded(runs: 3)).state, .waiting)
+        XCTAssertEqual(job.evaluate(at: "2026-11-14 02:31", Scenario.loaded(runs: 3)).state, .missed)
+        job.evaluate(at: "2026-11-14 09:59", Scenario.loaded(runs: 3))
+
+        // Asleep from 10:00 to 10:05, and again later.
+        for (moment, woke) in [("2026-11-14 10:06", "2026-11-14 10:05"), ("2026-11-14 10:36", "2026-11-14 10:05"), ("2026-11-14 11:06", "2026-11-14 11:05")] {
+            let evaluation = job.evaluate(at: moment, Scenario.loaded(runs: 3, awakeSince: woke))
+            XCTAssertEqual(evaluation.state, .missed, moment)
+            XCTAssertFalse(evaluation.changed, moment)
+        }
+    }
+
+    func testWakeAfterARunWasAlreadyMissedDoesNotBringBackAnOldFailure() {
+        let job = Scenario.watchedSinceYesterday()
+        job.evaluate(at: "2026-11-13 23:30", Scenario.loaded(runs: 3, exit: .code(1)))
+        XCTAssertEqual(job.evaluate(at: "2026-11-14 02:31", Scenario.loaded(runs: 3, exit: .code(1))).state, .missed)
+
+        XCTAssertEqual(job.evaluate(at: "2026-11-14 10:06", Scenario.loaded(runs: 3, exit: .code(1), awakeSince: "2026-11-14 10:05")).state, .missed)
+    }
+
+    /// Awake at 02:00 and asleep from 02:10. The run had ten minutes to start and did not; sleeping afterwards
+    /// does not excuse it.
+    func testSleepThatBeginsAfterTheScheduledTimeDoesNotExtendTheGrace() {
+        let job = Scenario.watchedSinceYesterday()
+        XCTAssertEqual(job.evaluate(at: "2026-11-14 02:09", Scenario.loaded(runs: 3)).state, .waiting)
+
+        XCTAssertEqual(job.evaluate(at: "2026-11-14 07:01", Scenario.loaded(runs: 3, awakeSince: "2026-11-14 07:00")).state, .missed)
+    }
+
     /// A Mac that was switched off does not make up for the scheduled time. That is reported: the job did not
     /// run, even though nothing is wrong with it.
     func testSwitchedOffOverTheScheduledTimeIsMissedAfterTheGraceFromStarting() {
