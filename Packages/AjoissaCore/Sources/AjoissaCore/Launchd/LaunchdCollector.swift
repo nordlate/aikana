@@ -185,30 +185,38 @@ public struct LaunchdCollector: Sendable {
     /// Finds the plist that defines `label`. A plist is usually named after its label, but does not have to be,
     /// so the folders are searched by content when no file has the expected name.
     private func locate(label: String) -> Search {
-        var search = Search()
+        var unreadable: [String] = []
+        let found = findByName(label, unreadable: &unreadable) ?? findByContent(label, unreadable: &unreadable)
+        return Search(found: found, unreadable: unreadable)
+    }
+
+    private func findByName(_ label: String, unreadable: inout [String]) -> Found? {
         for location in locations {
             let expected = location.directory.appending(path: "\(label).plist")
             switch Self.contents(of: expected) {
             case .missing:
                 continue
             case .unreadable:
-                search.unreadable.append(expected.path)
+                unreadable.append(expected.path)
             case let .data(data):
                 switch Self.read(data) {
                 case let .success(definition) where definition.label == label:
-                    search.found = Found(location: location, path: expected.path, definition: definition, problem: nil)
-                    return search
+                    return Found(location: location, path: expected.path, definition: definition, problem: nil)
                 case .success:
+                    // The file is named after this label but defines another job.
                     continue
                 case let .failure(error):
-                    search.found = Found(location: location, path: expected.path, definition: nil, problem: error.reason)
-                    return search
+                    return Found(location: location, path: expected.path, definition: nil, problem: error.reason)
                 }
             }
         }
+        return nil
+    }
+
+    private func findByContent(_ label: String, unreadable: inout [String]) -> Found? {
         for location in locations {
             guard let names = Self.plistNames(in: location.directory) else {
-                search.unreadable.append(location.directory.path)
+                unreadable.append(location.directory.path)
                 continue
             }
             for name in names {
@@ -216,11 +224,10 @@ public struct LaunchdCollector: Sendable {
                 let file = location.directory.appending(path: name)
                 guard case let .data(data) = Self.contents(of: file), case let .success(definition) = Self.read(data),
                       definition.label == label else { continue }
-                search.found = Found(location: location, path: file.path, definition: definition, problem: nil)
-                return search
+                return Found(location: location, path: file.path, definition: definition, problem: nil)
             }
         }
-        return search
+        return nil
     }
 
     /// The definition that goes with a loaded job. launchd says which file it loaded the job from; when that is

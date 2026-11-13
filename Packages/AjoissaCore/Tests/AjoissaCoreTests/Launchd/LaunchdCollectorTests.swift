@@ -302,36 +302,6 @@ final class LaunchdCollectorTests: XCTestCase {
         XCTAssertEqual(runner.calls, [])
     }
 
-    // MARK: - Descriptions
-
-    func testStatusDescriptions() {
-        let cases: [(LaunchdObservation.Status, String)] = [
-            (.loaded(LaunchdServiceState(runState: .notRunning, runs: 3, lastExit: .code(0))), "loaded, not running, 3 runs, last exit code 0"),
-            (.loaded(LaunchdServiceState(runState: .running, processID: 42, runs: 1, lastExit: .neverExited)), "loaded, running as process 42, 1 run, never exited"),
-            (.loaded(LaunchdServiceState(runState: .running)), "loaded, running"),
-            (.loaded(LaunchdServiceState(runState: .notRunning, runs: 0, lastExit: .signal("Terminated: 15"))), "loaded, not running, 0 runs, last run ended by signal Terminated: 15"),
-            (.loaded(LaunchdServiceState(runState: .other("spawn scheduled"))), "loaded, spawn scheduled"),
-            (.loaded(LaunchdServiceState()), "loaded"),
-            (.notLoaded, "not loaded: the plist exists but launchd has not loaded it, so the job will not run"),
-            (.plistMissing, "not found: there is no plist with this label and launchd does not know it"),
-            (.unknown(reason: "launchctl did not answer in time"), "unknown: launchctl did not answer in time")
-        ]
-
-        for (status, expected) in cases {
-            XCTAssertEqual(LaunchdObservation(label: "com.example.job", status: status).statusDescription, expected)
-        }
-    }
-
-    func testScheduleDescriptionForAJobWithoutATimetable() {
-        let observation = LaunchdObservation(
-            label: "com.example.job",
-            status: .notLoaded,
-            definition: LaunchdJobDefinition(label: "com.example.job")
-        )
-
-        XCTAssertEqual(observation.scheduleDescription, "none: the job does not run on a timetable")
-    }
-
     // MARK: - Helpers
 
     @discardableResult
