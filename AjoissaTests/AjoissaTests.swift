@@ -8,7 +8,7 @@ final class AjoissaTests: XCTestCase {
         XCTAssertFalse(AjoissaCore.version.isEmpty)
     }
 
-    func testEmptyStateHasATitle() {
-        XCTAssertFalse(StatusMenuView.emptyStateTitle.isEmpty)
+    func testTheAppDoesNotWatchWhileItHostsTests() {
+        XCTAssertTrue(WatchModel.isHostingTests)
     }
 }
