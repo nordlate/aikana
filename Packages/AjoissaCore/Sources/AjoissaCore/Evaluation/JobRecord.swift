@@ -71,6 +71,9 @@ public struct JobRecord: Sendable, Equatable, Codable {
     /// The state the job was in before its state became unreadable or its host went offline. Coming back to the
     /// same state is not news.
     public var stateBeforeUnreadable: JobState?
+    /// When a run was seen that no scheduled time was waiting for, such as one started by hand after the
+    /// scheduled run failed. Its output is then what the checks should read.
+    public var extraRunSeenAt: Date?
     /// What the job's checks remember. The evaluation carries it along and never reads it.
     public var checkState: CheckState?
     public var state: JobState
@@ -93,6 +96,7 @@ public struct JobRecord: Sendable, Equatable, Codable {
         openRunGraceFrom: Date? = nil,
         intervalFrom: Date? = nil,
         stateBeforeUnreadable: JobState? = nil,
+        extraRunSeenAt: Date? = nil,
         checkState: CheckState? = nil,
         state: JobState = .waiting,
         reason: String = "",
@@ -111,6 +115,7 @@ public struct JobRecord: Sendable, Equatable, Codable {
         self.openRunGraceFrom = openRunGraceFrom
         self.intervalFrom = intervalFrom
         self.stateBeforeUnreadable = stateBeforeUnreadable
+        self.extraRunSeenAt = extraRunSeenAt
         self.checkState = checkState
         self.state = state
         self.reason = reason
@@ -133,9 +138,16 @@ public struct JobEvaluation: Sendable, Equatable {
     /// or for a job on an interval the start of the stretch in which a run must have happened. `nil` for a
     /// job with no run to expect.
     public var checksSince: Date?
-    /// The moment that tells one run's output from the last one's: the scheduled time in question, or for a
-    /// job on an interval the moment its latest run was seen. It stays the same until there is a new run.
+    /// The moment that tells one run's output from the last one's. It stays the same until there is a new run.
+    /// For a job with scheduled times it is the scheduled time in question, or the moment a later run was seen
+    /// that no scheduled time was waiting for. For other jobs it is the moment the latest run was seen.
     public var outputSince: Date?
+    /// The scheduled time before the one in question. Whatever was noted about a log before then belongs to
+    /// an older run still.
+    public var runBeforeExpected: Date?
+    /// For a job known only through its checks: the moment its run has had its time. A check result from
+    /// before then was a look at a job that may still have been working.
+    public var checksFreshFrom: Date?
     /// Whether the state is news: it differs from the one in the record that was passed in. True for a job seen
     /// for the first time. A job that comes back from being unreadable or offline to the state it had before
     /// has not changed.

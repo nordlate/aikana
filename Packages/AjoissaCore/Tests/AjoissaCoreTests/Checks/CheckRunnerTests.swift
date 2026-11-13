@@ -230,6 +230,56 @@ final class CheckRunnerTests: XCTestCase {
         XCTAssertEqual(first.state.commands.count, 2)
     }
 
+    func testResultIsKeptThroughALookThatSkipsTheCommand() {
+        let check = Check.command(arguments: ["/usr/bin/verify"], timeout: 30)
+        let first = CheckRunner.run([check], on: host, context: context(at: "2026-11-14 03:00"), state: nil)
+        var open = context(at: "2026-11-14 03:01")
+        open.runIsOpen = true
+        let skipped = CheckRunner.run([check], on: host, context: open, state: first.state)
+
+        _ = CheckRunner.run([check], on: host, context: context(at: "2026-11-14 03:02"), state: skipped.state)
+
+        XCTAssertEqual(host.commands.count, 1)
+    }
+
+    /// The clock was set back: the kept result is stamped later than now. It is not trusted.
+    func testResultStampedInTheFutureIsNotReused() {
+        let check = Check.command(arguments: ["/usr/bin/verify"], timeout: 30)
+        let first = CheckRunner.run([check], on: host, context: context(at: "2026-11-14 03:10"), state: nil)
+
+        _ = CheckRunner.run([check], on: host, context: context(at: "2026-11-14 03:00"), state: first.state)
+
+        XCTAssertEqual(host.commands.count, 2)
+    }
+
+    /// For a job known only through its checks, a failure from while it may still have been working is asked
+    /// about again as soon as its time is over.
+    func testResultFromBeforeTheRunHadItsTimeIsNotReusedAfterwards() {
+        let check = Check.command(arguments: ["/usr/bin/verify"], timeout: 30)
+        var early = context(at: "2026-11-14 02:16")
+        early.commandsFreshFrom = TestClock.date("2026-11-14 02:30")
+        host.answerCommands(with: .success(CommandResult(exitCode: 1)))
+        let first = CheckRunner.run([check], on: host, context: early, state: nil)
+
+        // Still within its time two minutes later: the kept answer will do.
+        var stillEarly = early
+        stillEarly.now = TestClock.date("2026-11-14 02:18")
+        let second = CheckRunner.run([check], on: host, context: stillEarly, state: first.state)
+        XCTAssertEqual(host.commands.count, 1)
+
+        host.answerCommands(with: .success(CommandResult(exitCode: 0)))
+        var late = early
+        late.now = TestClock.date("2026-11-14 02:30:30")
+        let third = CheckRunner.run([check], on: host, context: late, state: second.state)
+        XCTAssertEqual(third.outcomes[0].result, .passed)
+        XCTAssertEqual(host.commands.count, 2)
+
+        // From then on the answer is kept as usual.
+        late.now = TestClock.date("2026-11-14 02:35")
+        _ = CheckRunner.run([check], on: host, context: late, state: third.state)
+        XCTAssertEqual(host.commands.count, 2)
+    }
+
     /// A command judges what a run left behind. Until the run has been seen there is nothing for it to judge.
     func testCommandIsLeftForLaterWhileTheRunHasNotBeenSeen() {
         let check = Check.command(arguments: ["/usr/bin/verify"], timeout: 30)

@@ -42,12 +42,17 @@ public enum JobAssessor {
             logProvesRun: first.expectedRun != nil,
             // For a job with a scheduler, a run that has not been seen yet is waited for or missed.
             runIsOpen: evidence.source != nil && [.waiting, .missed].contains(first.state),
+            runBefore: first.runBeforeExpected,
+            commandsFreshFrom: first.checksFreshFrom,
             defaultLogPaths: defaultLogPaths,
             calendar: calendar
         )
-        let (outcomes, state) = CheckRunner.run(job.checks, on: host, context: context, state: previous?.checkState)
+        var (outcomes, state) = CheckRunner.run(job.checks, on: host, context: context, state: previous?.checkState)
         evidence.checks = outcomes
         var evaluation = JobEvaluator.evaluate(job: job, evidence: evidence, previous: previous, now: now, calendar: calendar)
+        // With the checks' results the evaluation may date the same run differently, for instance by the time
+        // of the file that proves it. What was noted for the run is kept under the date it will be asked by.
+        state.move(from: first.outputSince, to: evaluation.outputSince)
         evaluation.record.checkState = state
         return Assessment(evaluation: evaluation, outcomes: outcomes)
     }

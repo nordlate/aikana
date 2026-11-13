@@ -95,6 +95,29 @@ final class LogPatternTests: LogCheckTestCase {
         XCTAssertEqual(look(at: "2026-11-14 09:02", since: run2, check).result, .failed("the log contains \"ERROR\""))
     }
 
+    /// Nobody looked for more than a day. What was noted on the 13th is from before the run of the 14th, so
+    /// reading from there would blame the 15th for the 14th's error.
+    func testNoteFromBeforeAnOlderRunIsNotUsed() {
+        let check = Check.logPattern(path: log, contains: nil, notContains: "ERROR")
+        host.put(log, modified: "2026-11-13 02:05", contents: "fine\n")
+        look(at: "2026-11-13 23:30", since: run1, check, runBefore: "2026-11-12 02:00")
+
+        host.put(log, modified: "2026-11-15 02:03", contents: "fine\nERROR on the 14th\nfine on the 15th\n")
+        let outcome = look(at: "2026-11-15 03:00", since: "2026-11-15 02:00", check, runBefore: run2)
+
+        XCTAssertEqual(outcome, CheckOutcome(result: .passed, detail: "not read yet: /var/log/job.log is read from the next run on"))
+    }
+
+    func testNoteFromJustBeforeTheRunIsUsedAlsoWhenTakenAtTheVeryMoment() {
+        let check = Check.logPattern(path: log, contains: nil, notContains: "ERROR")
+        host.put(log, modified: "2026-11-13 02:05", contents: "ERROR last night\n")
+        look(at: run2, since: run1, check, runBefore: "2026-11-12 02:00")
+
+        host.put(log, modified: "2026-11-14 02:03", contents: "ERROR last night\nfine\n")
+
+        XCTAssertEqual(look(at: "2026-11-14 02:10", since: run2, check, runBefore: run1).result, .passed)
+    }
+
     /// For a job on an interval the run in question is the latest one seen, and stays that until the next.
     func testOutputOfTheLatestRunIsReadUntilTheNextRunIsSeen() {
         let check = Check.logPattern(path: log, contains: nil, notContains: "ERROR")

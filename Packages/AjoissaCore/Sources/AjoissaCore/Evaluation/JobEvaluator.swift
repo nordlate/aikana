@@ -45,6 +45,10 @@ struct EvaluationPass {
     var nextRun: Date?
     /// For a job on an interval, the start of the stretch in which a run must have happened.
     var intervalWindowStart: Date?
+    /// Whether the job has no scheduled times, so that its runs are told apart by when they were seen.
+    var hasNoScheduledTimes = false
+    var runBeforeExpected: Date?
+    var checksFreshFrom: Date?
 
     init(job: Job, evidence: Evidence, previous: JobRecord?, now: Date, calendar: Calendar) {
         self.job = job
@@ -116,6 +120,7 @@ struct EvaluationPass {
         record.openRun = nil
         record.openRunGraceFrom = nil
         record.intervalFrom = nil
+        record.extraRunSeenAt = nil
     }
 
     // MARK: - No scheduler, or no timetable
@@ -126,13 +131,16 @@ struct EvaluationPass {
         let deadline: Date
         if let due = timetable.lastCalendarOccurrence(onOrBefore: now, calendar: calendar) {
             expectedRun = due
+            runBeforeExpected = timetable.lastCalendarOccurrence(onOrBefore: due.addingTimeInterval(-1), calendar: calendar)
             nextRun = timetable.nextCalendarOccurrence(after: now, calendar: calendar)
             deadline = max(due, awakeSince).addingTimeInterval(job.grace)
         } else {
             let window = (timetable.interval ?? 0) + job.grace
+            hasNoScheduledTimes = true
             intervalWindowStart = now.addingTimeInterval(-window)
             deadline = max(record.watchingSince, awakeSince).addingTimeInterval(window)
         }
+        checksFreshFrom = deadline
         if now <= deadline, !evidence.checks.allSatisfy({ $0.result == .passed }) {
             let run = expectedRun.map { "the run due at \(stamp($0))" } ?? "the next run"
             return finish(.waiting, "its checks do not pass yet; \(run) has until \(stamp(deadline))")
@@ -142,6 +150,7 @@ struct EvaluationPass {
 
     /// A job that runs on demand or on some event has no run to wait for. Only its last result can be judged.
     mutating func decideWithoutTimetable() -> JobEvaluation {
+        hasNoScheduledTimes = true
         if evidence.source?.isRunning == true {
             return finish(.running, "it is running now")
         }
@@ -187,6 +196,15 @@ struct EvaluationPass {
             format: "%04d-%02d-%02d %02d:%02d",
             parts.year ?? 0, parts.month ?? 0, parts.day ?? 0, parts.hour ?? 0, parts.minute ?? 0
         )
+    }
+
+    /// See ``JobEvaluation/outputSince``.
+    var outputSince: Date? {
+        if hasNoScheduledTimes {
+            return record.lastRun ?? record.watchingSince
+        }
+        guard let expectedRun else { return nil }
+        return max(expectedRun, record.extraRunSeenAt ?? .distantPast)
     }
 
     // MARK: - Finishing
@@ -236,7 +254,9 @@ struct EvaluationPass {
             expectedRun: expectedRun,
             nextRun: nextRun,
             checksSince: expectedRun ?? intervalWindowStart,
-            outputSince: expectedRun ?? (intervalWindowStart == nil ? nil : record.lastRun ?? record.watchingSince),
+            outputSince: outputSince,
+            runBeforeExpected: runBeforeExpected,
+            checksFreshFrom: checksFreshFrom,
             changed: changed,
             record: record
         )

@@ -14,11 +14,15 @@ public struct CheckState: Sendable, Equatable, Codable {
         public var identity: UInt64?
         /// The last few bytes before `offset`. If they are no longer there, the log was rewritten in place.
         public var tail: Data
+        /// When this was noted. A log that is exactly as long as it was but was written since has been
+        /// rewritten with the same text.
+        public var noted: Date?
 
-        public init(offset: Int64, identity: UInt64? = nil, tail: Data = Data()) {
+        public init(offset: Int64, identity: UInt64? = nil, tail: Data = Data(), noted: Date? = nil) {
             self.offset = offset
             self.identity = identity
             self.tail = tail
+            self.noted = noted
         }
     }
 
@@ -65,6 +69,20 @@ public struct CheckState: Sendable, Equatable, Codable {
     public var logBaselines: [String: LogBaseline]
     /// By command check: its last result.
     public var commands: [String: CommandResult]
+
+    /// Files what was noted for one run under another moment. The evaluation can settle on a different moment
+    /// for the same run once it has the checks' results, and next time it will ask by that one.
+    public mutating func move(from old: Date?, to new: Date?) {
+        guard old != new else { return }
+        if let old, let new {
+            for (path, baseline) in logBaselines where baseline.since == old {
+                logBaselines[path]?.since = new
+            }
+        }
+        for (key, result) in commands where result.since == old {
+            commands[key]?.since = new
+        }
+    }
 
     public init(
         logMarks: [String: LogMark] = [:],

@@ -76,9 +76,9 @@ extension CheckPass {
         guard var start = startOfRun(in: path, since: since, file: file, end: end) else {
             return .notReadYet
         }
-        if try !stillHolds(start, in: path, size: size, identity: file?.identity) {
+        if try !stillHolds(start, in: path, file: file) {
             // The log is not the text it was: emptied, rewritten or replaced. All of it is new.
-            start = CheckState.LogPosition(offset: 0, identity: file?.identity)
+            start = CheckState.LogPosition(offset: 0, identity: file?.identity, noted: context.now)
         }
         state.logBaselines[path] = CheckState.LogBaseline(since: since, position: start)
         let from = max(start.offset, size - CheckRunner.logReadLimit)
@@ -94,7 +94,10 @@ extension CheckPass {
         if let kept = previous.logBaselines[path], kept.since == since {
             return kept.position
         }
-        if let mark = previous.logMarks[path], mark.date < since {
+        // Something noted before the previous scheduled time is from before an older run still. Reading from
+        // there would take that run's output for this one's.
+        let earliestUsable = context.runBefore ?? .distantPast
+        if let mark = previous.logMarks[path], mark.date <= since, mark.date >= earliestUsable {
             // The last look was before the run: where the log ended then is where the run's output starts.
             return mark.position
         }
@@ -102,7 +105,7 @@ extension CheckPass {
             // Never looked before the run, but the log has not been written since: nothing in it is new.
             return end
         }
-        if let kept = previous.logBaselines[path], kept.since < since {
+        if let kept = previous.logBaselines[path], kept.since < since, kept.since >= earliestUsable {
             // The start of an earlier run is known. Reading from there takes in more than this run wrote,
             // which is better than not reading it at all.
             return kept.position
@@ -113,16 +116,22 @@ extension CheckPass {
     /// A place in the log as it is now: the offset, the file's identity and the bytes just before the offset.
     private func position(in path: String, at offset: Int64, identity: UInt64?) throws(HostAccessError) -> CheckState.LogPosition {
         let tail = try host.read(path, range: max(0, offset - CheckRunner.tailLength)..<offset)
-        return CheckState.LogPosition(offset: offset, identity: identity, tail: tail)
+        return CheckState.LogPosition(offset: offset, identity: identity, tail: tail, noted: context.now)
     }
 
     /// Whether a remembered place still means the same text: the log is at least that long, is the same file,
-    /// and still has the same bytes before that place.
-    private func stillHolds(_ position: CheckState.LogPosition, in path: String, size: Int64, identity: UInt64?) throws(HostAccessError) -> Bool {
+    /// still has the same bytes before that place, and has not been written without growing.
+    private func stillHolds(_ position: CheckState.LogPosition, in path: String, file: HostFile?) throws(HostAccessError) -> Bool {
+        let size = file?.size ?? 0
         if position.offset > size {
             return false
         }
-        if let then = position.identity, let now = identity, then != now {
+        if let then = position.identity, let now = file?.identity, then != now {
+            return false
+        }
+        if position.offset == size, let noted = position.noted, let modified = file?.modified, modified > noted {
+            // Written since, yet exactly as long as it was: rewritten with text of the same length. A job that
+            // empties its log and writes the same lines every run does this.
             return false
         }
         guard !position.tail.isEmpty else { return true }

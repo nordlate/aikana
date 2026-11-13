@@ -14,6 +14,11 @@ public struct CheckContext: Sendable {
     /// Whether the expected run has not been seen yet. Commands are then left for later: a command judges what
     /// a run left behind, and cannot show that there was one.
     public var runIsOpen: Bool
+    /// The scheduled time before the run in question: see ``JobEvaluation/runBeforeExpected``.
+    public var runBefore: Date?
+    /// A command result from before this moment is not reused once the moment has passed: see
+    /// ``JobEvaluation/checksFreshFrom``.
+    public var commandsFreshFrom: Date?
     /// The job's own log files, for a `log-pattern` check that names none.
     public var defaultLogPaths: [String]
     /// The calendar and time zone that times in messages are written in.
@@ -25,6 +30,8 @@ public struct CheckContext: Sendable {
         outputSince: Date? = nil,
         logProvesRun: Bool = true,
         runIsOpen: Bool = false,
+        runBefore: Date? = nil,
+        commandsFreshFrom: Date? = nil,
         defaultLogPaths: [String] = [],
         calendar: Calendar
     ) {
@@ -33,6 +40,8 @@ public struct CheckContext: Sendable {
         self.outputSince = outputSince ?? since
         self.logProvesRun = logProvesRun
         self.runIsOpen = runIsOpen
+        self.runBefore = runBefore
+        self.commandsFreshFrom = commandsFreshFrom
         self.defaultLogPaths = defaultLogPaths
         self.calendar = calendar
     }
@@ -173,7 +182,8 @@ struct CheckPass {
             state.commands[key] = previous.commands[key]
             return CheckOutcome(result: .skipped("it is run once the job has run"))
         }
-        if let kept = previous.commands[key], kept.since == context.outputSince {
+        if let kept = previous.commands[key], kept.since == context.outputSince, !isFromBeforeTheRunHadItsTime(kept) {
+            // A result stamped later than now is from before the clock was set back; it is not reused.
             let age = context.now.timeIntervalSince(kept.checkedAt)
             if age >= 0, age < CheckRunner.commandRecheckInterval {
                 // Nothing has run since the command last judged this run. Asking again so soon would only
@@ -185,6 +195,13 @@ struct CheckPass {
         let outcome = runCommand(arguments: arguments, timeout: timeout)
         state.commands[key] = CheckState.CommandResult(since: context.outputSince, checkedAt: context.now, outcome: outcome)
         return outcome
+    }
+
+    /// For a job known only through its checks, a result from while the job could still have been working
+    /// says nothing once that time is over.
+    private func isFromBeforeTheRunHadItsTime(_ kept: CheckState.CommandResult) -> Bool {
+        guard let freshFrom = context.commandsFreshFrom, context.now > freshFrom else { return false }
+        return kept.checkedAt <= freshFrom
     }
 
     private func runCommand(arguments: [String], timeout: TimeInterval) -> CheckOutcome {

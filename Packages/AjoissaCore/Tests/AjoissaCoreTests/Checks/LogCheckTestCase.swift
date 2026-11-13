@@ -17,10 +17,11 @@ class LogCheckTestCase: XCTestCase {
     // MARK: - Helpers
 
     @discardableResult
-    func look(at moment: String, since: String?, _ check: Check, defaultLogPaths: [String] = []) -> CheckOutcome {
+    func look(at moment: String, since: String?, _ check: Check, defaultLogPaths: [String] = [], runBefore: String? = nil) -> CheckOutcome {
         let context = CheckContext(
             now: TestClock.date(moment),
             since: since.map { TestClock.date($0) },
+            runBefore: runBefore.map { TestClock.date($0) },
             defaultLogPaths: defaultLogPaths,
             calendar: TestClock.utc
         )

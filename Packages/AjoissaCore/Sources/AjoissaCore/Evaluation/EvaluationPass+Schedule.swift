@@ -19,6 +19,9 @@ extension EvaluationPass {
             open = openRun(timetable)
         }
         expectedRun = open ?? latestDue
+        runBeforeExpected = expectedRun.flatMap {
+            timetable.lastCalendarOccurrence(onOrBefore: $0.addingTimeInterval(-1), calendar: calendar)
+        }
         if evidence.source?.isRunning == true {
             return finish(.running, "it is running now")
         }
@@ -85,6 +88,7 @@ extension EvaluationPass {
     mutating func decideByInterval(_ interval: TimeInterval) -> JobEvaluation {
         // A file or log line newer than this shows a run within the stretch that must have had one.
         intervalWindowStart = now.addingTimeInterval(-interval - job.grace)
+        hasNoScheduledTimes = true
         if let proof = proofOfRun(noEarlierThan: .distantPast) {
             // Credited when the proof is from, not now: a file from the last run must not keep a job that has
             // since stopped looking alive.

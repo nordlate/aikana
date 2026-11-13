@@ -80,10 +80,11 @@ A job can exit with code 0 and still have produced nothing. Checks say what a su
 - **A check can prove a run.** A file newer than the scheduled time, or a wanted line in the log, shows the job ran even when the run itself was not seen.
 - **A failing check does not fail a job whose run still has time.** Yesterday's report is expected to be old at 02:01.
 - **Only what the run wrote.** A log only grows. Ajoissa notes where each log ends every time it looks, and reads from where the log stood before the run. A log it first sees after the run has already written to it is let through once and read properly from the next run on. A log that was emptied, rewritten or rotated is noticed and read from its start.
+- **A run started by hand is judged on its own output.** If the scheduled run failed and you run the job again, the log check reads that run's lines and the commands are asked again.
 - **Commands are not run at every look.** A `command` check runs once the job has run, and its result is kept for that run. It is asked again after 15 minutes, and at once when a new run is seen.
 - **Paths** may contain `*`, `?` and `[...]`, and `~/` for the home directory. `**` is not supported.
 - **Checks are skipped** while the job is running, and when the job cannot be looked at or cannot run.
-- **`log-pattern` needs runs it can tell apart.** For a job on an interval it reads the output of the latest run that was seen. A job with no source and an `every` schedule cannot have one; the config refuses it.
+- **`log-pattern` needs runs it can tell apart.** For a job on an interval, or one with no timetable, it reads the output of the latest run that was seen. A job with no source and an `every` schedule cannot have one; the config refuses it.
 
 ### Limits
 
@@ -97,6 +98,9 @@ A job can exit with code 0 and still have produced nothing. Checks say what a su
 - **Paths in checks:** `*` does not match a name that starts with a dot, as in a shell. A `[` meant literally cannot be combined with a wildcard. A pattern that matches more than 10000 files is refused.
 - **Long logs:** only the last megabyte of what a run wrote is read.
 - **Shared logs:** lines another job writes to the same log count as this run's.
+- **A log that is touched without being changed** looks rewritten, and is read from its start once.
+- **`file-age` without `maxAge`** needs a scheduled time or an interval to compare with. On a job with no timetable it cannot be carried out; give it a `maxAge`.
+- **A scheduler that reports no run count:** for a job on an interval, a new run is then recognised only by its checks, and the log is read from the first run on.
 
 ## Layout
 
