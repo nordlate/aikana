@@ -11,9 +11,9 @@ struct FooterView: View {
 
     var body: some View {
         HStack {
-            Text(loginProblem ?? "Ajoissa \(AjoissaCore.version)")
+            Text(problem ?? "Ajoissa \(AjoissaCore.version)")
                 .font(.caption)
-                .foregroundStyle(loginProblem == nil ? Color.secondary : Color.orange)
+                .foregroundStyle(problem == nil ? Color.secondary : Color.orange)
                 .lineLimit(2)
             Spacer()
             Menu {
@@ -24,6 +24,9 @@ struct FooterView: View {
                     reveal(model.historyURL)
                 }
                 Divider()
+                Toggle("Notifications", isOn: Binding(get: { model.notificationsEnabled }, set: { model.notificationsEnabled = $0 }))
+                Toggle("Notify When Fine Again", isOn: Binding(get: { model.notifiesRecovery }, set: { model.notifiesRecovery = $0 }))
+                    .disabled(!model.notificationsEnabled)
                 Toggle("Open at Login", isOn: Binding(get: { opensAtLogin }, set: setOpensAtLogin))
                 Divider()
                 Button("Quit Ajoissa") {
@@ -40,6 +43,17 @@ struct FooterView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+    }
+
+    /// Something the user should know about a switch in the menu.
+    private var problem: String? {
+        if let loginProblem {
+            return loginProblem
+        }
+        if model.notificationsEnabled, model.notificationsRefused {
+            return "Notifications are switched off for Ajoissa in System Settings"
+        }
+        return nil
     }
 
     /// Opens the config file, or shows where it should be when there is none yet.

@@ -15,18 +15,31 @@ extension WatchModel {
             watch: LocalWatch(homeDirectory: home, userID: getuid())
         )
         let host = LocalHost(homeDirectory: home, runner: ProcessCommandRunner())
-        return WatchModel(environment: Environment(
+        let notifier = SystemNotifier()
+        let model = WatchModel(environment: Environment(
             configURL: configURL,
             historyURL: historyFile.url,
             round: { now in
                 // Looking runs programs and reads files; it stays off the main thread.
-                await Task.detached { session.round(now: now, calendar: .current) }.value
+                await Task.detached { session.round(now: now, calendar: .current, announce: true) }.value
             },
             configFingerprint: { fingerprint(of: configURL) },
             readLog: { path in
                 await Task.detached { readLog(path, on: host) }.value
-            }
+            },
+            deliver: { await notifier.deliver($0) },
+            requestNotificationPermission: { await notifier.requestPermission() },
+            readSwitch: { UserDefaults.standard.object(forKey: $0) as? Bool },
+            writeSwitch: { UserDefaults.standard.set($1, forKey: $0) }
         ))
+        notifier.onOpen = { [weak model] jobID in
+            model?.showJob(withID: jobID)
+            PanelOpener.open()
+        }
+        if !isHostingTests {
+            notifier.activate()
+        }
+        return model
     }
 
     nonisolated static func readLog(_ path: String, on host: any HostAccess) -> LogText {

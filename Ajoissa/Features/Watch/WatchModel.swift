@@ -32,6 +32,19 @@ final class WatchModel {
         /// Something that changes whenever the config file does.
         var configFingerprint: @Sendable () -> String
         var readLog: @Sendable (String) async -> LogText
+        /// Shows one notification.
+        var deliver: @Sendable (Announcement) async -> Void
+        /// Asks whether notifications may be shown; `false` when the user has said no.
+        var requestNotificationPermission: @Sendable () async -> Bool
+        /// A switch the user set, by name; `nil` when it was never set.
+        var readSwitch: @Sendable (String) -> Bool?
+        var writeSwitch: @Sendable (String, Bool) -> Void
+    }
+
+    /// The names the user's switches are stored under.
+    enum SwitchName {
+        static let notifications = "notificationsEnabled"
+        static let recoveryNotifications = "recoveryNotificationsEnabled"
     }
 
     /// How often every job is looked at.
@@ -47,6 +60,24 @@ final class WatchModel {
     /// Set when what was seen could not be written to the history file.
     private(set) var saveProblem: String?
 
+    /// The job whose detail is shown in place of the list.
+    var shownJobID: String?
+    /// Whether problems are told with a system notification.
+    var notificationsEnabled: Bool {
+        didSet {
+            environment.writeSwitch(SwitchName.notifications, notificationsEnabled)
+            if notificationsEnabled, !oldValue {
+                Task { await askForNotificationPermission() }
+            }
+        }
+    }
+    /// Whether a job that is fine again is told too.
+    var notifiesRecovery: Bool {
+        didSet { environment.writeSwitch(SwitchName.recoveryNotifications, notifiesRecovery) }
+    }
+    /// Whether the user has told macOS not to let Ajoissa show notifications.
+    private(set) var notificationsRefused = false
+
     let configURL: URL
     let historyURL: URL
 
@@ -54,11 +85,16 @@ final class WatchModel {
     @ObservationIgnored private var lookAgain = false
     @ObservationIgnored private var lastFingerprint: String?
     @ObservationIgnored private var tasks: [Task<Void, Never>] = []
+    /// What was last told about each job since the app started. When the history cannot be saved, the same
+    /// alert comes back at every look; this keeps it from being told again.
+    @ObservationIgnored private var lastTold: [String: Alert.Kind] = [:]
 
     init(environment: Environment) {
         self.environment = environment
         configURL = environment.configURL
         historyURL = environment.historyURL
+        notificationsEnabled = environment.readSwitch(SwitchName.notifications) ?? true
+        notifiesRecovery = environment.readSwitch(SwitchName.recoveryNotifications) ?? true
     }
 
     // MARK: - Looking
@@ -76,7 +112,9 @@ final class WatchModel {
             lookAgain = false
             // The fingerprint is taken before the round, so a change made during it is noticed afterwards.
             lastFingerprint = environment.configFingerprint()
-            apply(await environment.round(Date()))
+            let outcome = await environment.round(Date())
+            apply(outcome)
+            await announce(outcome)
         } while lookAgain
         isLooking = false
         lookingSince = nil
@@ -92,6 +130,9 @@ final class WatchModel {
     /// Starts looking on a timer and watching the config file. `wakes` yields each time the Mac wakes.
     func start(wakes: AsyncStream<Void>) {
         guard tasks.isEmpty else { return }
+        if notificationsEnabled {
+            Task { await askForNotificationPermission() }
+        }
         tasks = [
             Task { [weak self] in
                 while !Task.isCancelled {
@@ -126,9 +167,50 @@ final class WatchModel {
         case let .historyProblem(error):
             content = .historyProblem(Self.describe(error))
             saveProblem = nil
-        case let .looked(config, reports, problem):
+        case let .looked(config, reports, _, problem):
             content = .jobs(HostGroup.groups(of: reports, hosts: config.hosts))
+            if let shown = shownJobID, !reports.contains(where: { $0.id == shown }) {
+                // A job that left the config must not open by itself if it comes back.
+                shownJobID = nil
+            }
             saveProblem = problem.map(Self.describe)
+        }
+    }
+
+    // MARK: - Telling
+
+    /// Shows the job's detail the next time the panel is looked at.
+    func showJob(withID id: String?) {
+        shownJobID = id
+    }
+
+    func askForNotificationPermission() async {
+        notificationsRefused = await !environment.requestNotificationPermission()
+    }
+
+    /// Tells the user what the look found worth telling, as one notification.
+    ///
+    /// With notifications switched off nothing is told, and what would have been told is not kept for later:
+    /// switching them on again must not bring up old news.
+    private func announce(_ outcome: WatchSession.Outcome) async {
+        guard case let .looked(_, reports, alerts, _) = outcome else { return }
+        // What was told stands only while the job is still as it was told. Anything else ends it, also
+        // when no alert said so: a job taken out of the config, or one set not to notify for a while.
+        let states = Dictionary(reports.filter(\.job.notify).map { ($0.id, $0.state) }) { first, _ in first }
+        lastTold = lastTold.filter { jobID, kind in
+            switch kind {
+            case let .problem(state): states[jobID] == state
+            case .recovered: states[jobID] == .ok
+            }
+        }
+        let new = alerts.filter { lastTold[$0.jobID] != $0.kind }
+        for alert in new {
+            lastTold[alert.jobID] = alert.kind
+        }
+        guard notificationsEnabled else { return }
+        let wanted = new.filter { notifiesRecovery || $0.kind != .recovered }
+        if let announcement = Announcement(alerts: wanted) {
+            await environment.deliver(announcement)
         }
     }
 

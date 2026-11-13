@@ -9,8 +9,9 @@ public struct WatchSession: Sendable {
         /// The history could not be read. Nothing was looked at: judging without it would call every job
         /// unwatched, and saving would replace a file that may only need repair.
         case historyProblem(HistoryError)
-        /// Every job was looked at. `saveProblem` says so if what was seen could not be remembered.
-        case looked(config: Config, reports: [JobReport], saveProblem: HistoryError?)
+        /// Every job was looked at. `alerts` is what is worth telling the user now, empty unless the round was
+        /// asked to announce. `saveProblem` says so if what was seen could not be remembered.
+        case looked(config: Config, reports: [JobReport], alerts: [Alert], saveProblem: HistoryError?)
     }
 
     public let configURL: URL
@@ -27,7 +28,11 @@ public struct WatchSession: Sendable {
     ///
     /// Both files are read anew every round, so a change to the config takes effect at the next round and
     /// two programs taking turns with one history file see each other's records.
-    public func round(now: Date, calendar: Calendar) -> Outcome {
+    ///
+    /// - Parameter announce: Whether the caller tells the user about problems and recoveries. Only then is it
+    ///   worked out what is new to tell, and noted as told. A caller that only shows the state, such as the
+    ///   command line tool, must leave this off, or it would use up what the app has yet to announce.
+    public func round(now: Date, calendar: Calendar, announce: Bool = false) -> Outcome {
         let config: Config
         do {
             config = try ConfigLoader.load(contentsOf: configURL)
@@ -41,11 +46,12 @@ public struct WatchSession: Sendable {
             return .historyProblem(error)
         }
         let reports = watch.look(at: config, history: &history, now: now, calendar: calendar)
+        let alerts = announce ? AlertPlanner.plan(reports: reports, history: &history) : []
         do {
             try historyFile.save(history)
         } catch {
-            return .looked(config: config, reports: reports, saveProblem: error)
+            return .looked(config: config, reports: reports, alerts: alerts, saveProblem: error)
         }
-        return .looked(config: config, reports: reports, saveProblem: nil)
+        return .looked(config: config, reports: reports, alerts: alerts, saveProblem: nil)
     }
 }

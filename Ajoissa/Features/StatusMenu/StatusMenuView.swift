@@ -4,16 +4,15 @@ import SwiftUI
 /// The panel that opens from the menu bar item: the list of jobs, or one job in detail.
 struct StatusMenuView: View {
     let model: WatchModel
-    @State private var selectedJobID: String?
 
     static let panelWidth: CGFloat = 380
     static let panelHeight: CGFloat = 460
 
     var body: some View {
         VStack(spacing: 0) {
-            if let id = selectedJobID, let report = model.report(withID: id) {
+            if let id = model.shownJobID, let report = model.report(withID: id) {
                 JobDetailView(model: model, report: report) {
-                    selectedJobID = nil
+                    model.showJob(withID: nil)
                 }
             } else {
                 header
@@ -24,12 +23,6 @@ struct StatusMenuView: View {
             FooterView(model: model)
         }
         .frame(width: Self.panelWidth, height: Self.panelHeight)
-        .onChange(of: model.reports.map(\.id)) { _, ids in
-            // A job that left the config must not open by itself if it comes back.
-            if let id = selectedJobID, !ids.contains(id) {
-                selectedJobID = nil
-            }
-        }
     }
 
     private var header: some View {
@@ -86,7 +79,7 @@ struct StatusMenuView: View {
                     description: Text("Add jobs to \(model.configURL.path)")
                 )
             } else {
-                JobListView(groups: groups, saveProblem: model.saveProblem) { selectedJobID = $0 }
+                JobListView(groups: groups, saveProblem: model.saveProblem) { model.showJob(withID: $0) }
             }
         }
     }
