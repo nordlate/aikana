@@ -20,10 +20,20 @@ final class LogTailTests: XCTestCase {
         XCTAssertEqual(try LogTail.read(path, on: host, limit: 4), "ghij")
     }
 
+    func testALineThatStartsExactlyAtTheLimitIsKept() throws {
+        host.put(path, modified: "2026-11-14 02:00", contents: "aaaa\nbbbb\ncccc\n")
+        XCTAssertEqual(try LogTail.read(path, on: host, limit: 10), "bbbb\ncccc\n")
+    }
+
+    func testALastLineLongerThanTheLimitIsShownCut() throws {
+        host.put(path, modified: "2026-11-14 02:00", contents: "short\n" + String(repeating: "x", count: 30) + "\n")
+        XCTAssertEqual(try LogTail.read(path, on: host, limit: 20), String(repeating: "x", count: 19) + "\n")
+    }
+
     func testOnlyTheEndIsRead() throws {
         host.put(path, modified: "2026-11-14 02:00", contents: String(repeating: "x", count: 100))
         _ = try LogTail.read(path, on: host, limit: 10)
-        XCTAssertEqual(host.reads, ["\(path) 90..<100"])
+        XCTAssertEqual(host.reads, ["\(path) 89..<100"])
     }
 
     func testAMissingLogIsNil() throws {

@@ -24,6 +24,12 @@ struct StatusMenuView: View {
             FooterView(model: model)
         }
         .frame(width: Self.panelWidth, height: Self.panelHeight)
+        .onChange(of: model.reports.map(\.id)) { _, ids in
+            // A job that left the config must not open by itself if it comes back.
+            if let id = selectedJobID, !ids.contains(id) {
+                selectedJobID = nil
+            }
+        }
     }
 
     private var header: some View {
@@ -34,10 +40,11 @@ struct StatusMenuView: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(model.headline)
                     .font(.headline)
-                if let lastLooked = model.lastLooked {
-                    Text("Looked at \(lastLooked.formatted(.dateTime.hour().minute()))")
+                if let note = model.lookNote() {
+                    Text(note)
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             Spacer()

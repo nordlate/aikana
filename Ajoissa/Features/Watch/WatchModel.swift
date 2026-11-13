@@ -42,6 +42,8 @@ final class WatchModel {
     private(set) var content: Content = .starting
     private(set) var lastLooked: Date?
     private(set) var isLooking = false
+    /// When the look that is under way began. A look that never comes back is then seen to be old.
+    private(set) var lookingSince: Date?
     /// Set when what was seen could not be written to the history file.
     private(set) var saveProblem: String?
 
@@ -70,12 +72,14 @@ final class WatchModel {
         }
         isLooking = true
         repeat {
+            lookingSince = Date()
             lookAgain = false
             // The fingerprint is taken before the round, so a change made during it is noticed afterwards.
             lastFingerprint = environment.configFingerprint()
             apply(await environment.round(Date()))
         } while lookAgain
         isLooking = false
+        lookingSince = nil
     }
 
     /// Looks again if the config file is not the one that was last read.
@@ -150,7 +154,20 @@ final class WatchModel {
         reports.first { $0.id == id }
     }
 
-    /// The menu bar symbol. A config or history that cannot be used needs attention as much as a job does.
+    /// How long a look may take before the panel says that it is still under way.
+    static let slowLook: TimeInterval = 120
+
+    /// When the latest look was, or that one has been under way for long: a look can wait on a disk that
+    /// does not answer, and what is shown is then older than it seems.
+    func lookNote(now: Date = Date()) -> String? {
+        if let lookingSince, now.timeIntervalSince(lookingSince) >= Self.slowLook {
+            return "Still looking since \(Wording.moment(lookingSince, now: now)); what is shown may be out of date"
+        }
+        return lastLooked.map { "Looked at \(Wording.moment($0, now: now))" }
+    }
+
+    /// The menu bar symbol. A config or history that cannot be used, or a history that cannot be saved, needs
+    /// attention as much as a job does.
     var menuBarSymbolName: String {
         switch content {
         case .starting:
@@ -159,7 +176,7 @@ final class WatchModel {
             "clock.badge.exclamationmark"
         case .jobs:
             switch OverallStatus(reports: reports) {
-            case .allFine: "clock.badge.checkmark"
+            case .allFine: saveProblem == nil ? "clock.badge.checkmark" : "clock.badge.exclamationmark"
             case .needsAttention: "clock.badge.exclamationmark"
             case .failure: "clock.badge.xmark"
             }

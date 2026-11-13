@@ -134,9 +134,11 @@ final class WatchModelTests: XCTestCase {
         await model.refresh()
         XCTAssertEqual(model.saveProblem, "What was seen could not be saved to /h.json: the disk is full")
         XCTAssertEqual(model.reports.map(\.id), ["a"])
+        XCTAssertEqual(model.menuBarSymbolName, "clock.badge.exclamationmark")
 
         await model.refresh()
         XCTAssertNil(model.saveProblem)
+        XCTAssertEqual(model.menuBarSymbolName, "clock.badge.checkmark")
     }
 
     func testAFixedConfigBringsTheListBack() async {
@@ -196,7 +198,44 @@ final class WatchModelTests: XCTestCase {
         XCTAssertFalse(model.isLooking)
     }
 
+    func testALookThatDoesNotComeBackIsSaidToBeUnderWay() async {
+        let rounds = Rounds([looked()])
+        let model = model(rounds: rounds)
+        await model.refresh()
+        XCTAssertEqual(model.lookNote()?.hasPrefix("Looked at "), true)
+        XCTAssertNil(model.lookingSince)
+
+        await rounds.holdNext()
+        let stuck = Task { await model.refresh() }
+        while await rounds.count < 2 {
+            await Task.yield()
+        }
+        let began = model.lookingSince ?? .distantFuture
+        XCTAssertEqual(model.lookNote(now: began.addingTimeInterval(60))?.hasPrefix("Looked at "), true)
+        XCTAssertEqual(model.lookNote(now: began.addingTimeInterval(120))?.hasPrefix("Still looking since "), true)
+
+        await rounds.release()
+        await stuck.value
+        XCTAssertNil(model.lookingSince)
+    }
+
     // MARK: - Wording
+
+    func testOnlyALeadingTildeSlashIsTheHomeFolder() {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        XCTAssertEqual(LogSection.fileURL(of: "~/Library/Logs/a b.log").path, "\(home)/Library/Logs/a b.log")
+        XCTAssertEqual(LogSection.fileURL(of: "/var/log/a.log").path, "/var/log/a.log")
+        XCTAssertEqual(LogSection.fileURL(of: "/var/~/a.log").path, "/var/~/a.log")
+    }
+
+    func testAMomentAWeekAwayHasItsDate() {
+        let calendar = Calendar.current
+        let now = calendar.date(from: DateComponents(year: 2026, month: 11, day: 9, hour: 23, minute: 30)) ?? .distantPast
+        let inSix = calendar.date(from: DateComponents(year: 2026, month: 11, day: 15, hour: 0, minute: 15)) ?? .distantPast
+        let inSeven = calendar.date(from: DateComponents(year: 2026, month: 11, day: 16, hour: 0, minute: 15)) ?? .distantPast
+        XCTAssertEqual(Wording.moment(inSix, now: now), inSix.formatted(.dateTime.weekday(.abbreviated).hour().minute()))
+        XCTAssertEqual(Wording.moment(inSeven, now: now), inSeven.formatted(.dateTime.day().month(.abbreviated).hour().minute()))
+    }
 
     func testRowTimes() {
         let calendar = Calendar.current

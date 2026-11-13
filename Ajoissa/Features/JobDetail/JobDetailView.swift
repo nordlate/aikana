@@ -135,7 +135,7 @@ struct JobDetailView: View {
 }
 
 /// The end of one log file, and a button that opens the file.
-private struct LogSection: View {
+struct LogSection: View {
     let model: WatchModel
     let path: String
     /// The log is read again whenever the job has been looked at again.
@@ -156,7 +156,7 @@ private struct LogSection: View {
                     .help(path)
                 Spacer()
                 Button("Open Log") {
-                    NSWorkspace.shared.open(URL(fileURLWithPath: (path as NSString).expandingTildeInPath))
+                    NSWorkspace.shared.open(Self.fileURL(of: path))
                 }
                 .controlSize(.small)
                 .disabled(log == .missing)
@@ -192,6 +192,14 @@ private struct LogSection: View {
         Text(text)
             .font(.caption)
             .foregroundStyle(.secondary)
+    }
+
+    /// The file a path means. Only a leading `~/` is the home folder, as when the log is read.
+    static func fileURL(of path: String) -> URL {
+        if path.hasPrefix("~/") {
+            return FileManager.default.homeDirectoryForCurrentUser.appending(path: String(path.dropFirst(2)), directoryHint: .notDirectory)
+        }
+        return URL(fileURLWithPath: path)
     }
 
     static func lastLines(of text: String) -> String {

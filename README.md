@@ -29,9 +29,9 @@ The menu bar icon has three states: everything is fine, something needs attentio
 
 The panel lists the jobs by machine, those that need a look first. A job opens to its schedule, what its scheduler said, each check with its result, the verdicts it has been through, and the end of its log with a button that opens the file.
 
-Ajoissa looks at every job once a minute, when the Mac wakes, and when you press refresh (⌘R). It reads the config file again within a few seconds of a change. A config that cannot be used is shown with every problem in it, in place of the list; fix the file and the list comes back by itself.
+Ajoissa looks at every job once a minute, when the Mac wakes, and when you press refresh (⌘R in the list). It reads the config file again within a few seconds of a change. A config that cannot be used is shown with every problem in it, in place of the list; fix the file and the list comes back by itself. A history file that cannot be read or saved turns the icon to "needs attention" too.
 
-The menu at the bottom opens the config file, shows the history folder, and sets whether Ajoissa opens at login.
+The menu at the bottom opens the config file (or shows where it should be when there is none), shows the history folder, and sets whether Ajoissa opens at login.
 
 The app uses the same config and history files as `ajoissa status`, and honours `AJOISSA_CONFIG` and `AJOISSA_HISTORY`.
 

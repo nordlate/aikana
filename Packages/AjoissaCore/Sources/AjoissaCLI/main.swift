@@ -84,6 +84,9 @@ func status(_ arguments: [String]) throws(Stop) {
         // The file was usable a moment ago; it was changed in between.
         printError("\(url.path): not usable")
         error.lines.forEach { printError("  \($0)") }
+        if case .unreadable = error {
+            throw Stop(code: .unreadableConfig)
+        }
         throw Stop(code: .invalidConfig)
     case let .historyProblem(error):
         throw historyProblem(error)

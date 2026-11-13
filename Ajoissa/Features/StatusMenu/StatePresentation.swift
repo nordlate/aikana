@@ -74,7 +74,8 @@ enum Wording {
         if calendar.isDate(date, inSameDayAs: now) {
             return date.formatted(.dateTime.hour().minute())
         }
-        if abs(date.timeIntervalSince(now)) < 6 * 24 * 60 * 60 {
+        let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: now), to: calendar.startOfDay(for: date)).day ?? 7
+        if abs(days) < 7 {
             return date.formatted(.dateTime.weekday(.abbreviated).hour().minute())
         }
         return date.formatted(.dateTime.day().month(.abbreviated).hour().minute())
