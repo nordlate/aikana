@@ -8,7 +8,7 @@ Ajoissa watches scheduled jobs (launchd on Macs, systemd timers and cron on Linu
 
 ## Status
 
-Early. For jobs on this Mac, `ajoissa status` gives a verdict on each job: whether the run that was last due happened, failed or is missing, and whether it left behind what its checks ask for. The menu bar app shows the same verdicts and keeps them current. Jobs on other machines are listed and not read yet, and there are no notifications yet. The plan is in the issues, in three milestones: one Mac, other machines, release.
+Early. For jobs on this Mac, `ajoissa status` gives a verdict on each job: whether the run that was last due happened, failed or is missing, and whether it left behind what its checks ask for. The menu bar app shows the same verdicts, keeps them current and sends a notification when a job gets into trouble. Jobs on other machines are listed and not read yet. The plan is in the issues, in three milestones: one Mac, other machines, release.
 
 ## Config
 
@@ -31,7 +31,21 @@ The panel lists the jobs by machine, those that need a look first. A job opens t
 
 Ajoissa looks at every job once a minute, when the Mac wakes, and when you press refresh (⌘R in the list). It reads the config file again within a few seconds of a change. A config that cannot be used is shown with every problem in it, in place of the list; fix the file and the list comes back by itself. A history file that cannot be read or saved turns the icon to "needs attention" too.
 
-The menu at the bottom opens the config file (or shows where it should be when there is none), shows the history folder, and sets whether Ajoissa opens at login.
+### Notifications
+
+Ajoissa sends a system notification when a job is found `failed`, `missed` or `stale`, naming the job, the machine and the reason. You hear about each incident once: nothing is repeated while the job stays in trouble, including when it waits for its next run and fails again. When the job is `ok` again you get one more notification, and after that a new problem is a new incident. A problem that turns into another kind, such as `missed` into `failed`, is told again.
+
+Everything one look finds is combined into one notification. Clicking a notification about one job opens the panel on that job.
+
+- A job with `notify: false` in the config is shown and never notifies.
+- "Notifications" in the menu switches all of them off. What happens while they are off is not brought up when you switch them on again, but a recovery of a job you were told about still is.
+- "Notify When Fine Again" switches off the recovery notifications only.
+- `host offline` and `unknown` never notify. Once other machines are read, a machine marked `mayBeOffline` will not notify for being unreachable.
+- There is no daily summary.
+
+What you were last told about a job is kept in its record in the history file, so restarting Ajoissa does not repeat it. `ajoissa status` reads and writes the same history and never uses it up. The first time, macOS asks whether Ajoissa may show notifications; one that is due before you answer is not shown later.
+
+The menu at the bottom opens the config file (or shows where it should be when there is none), shows the history folder, holds the notification switches, and sets whether Ajoissa opens at login.
 
 The app uses the same config and history files as `ajoissa status`, and honours `AJOISSA_CONFIG` and `AJOISSA_HISTORY`.
 

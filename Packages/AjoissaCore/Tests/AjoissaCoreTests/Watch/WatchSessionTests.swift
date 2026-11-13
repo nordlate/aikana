@@ -10,7 +10,7 @@ final class WatchSessionTests: WatchTestCase {
         try addFailingAgent()
         try writeConfig(Self.configText(jobs: Self.failingAgentJob))
 
-        guard case let .looked(config, reports, saveProblem) = round() else {
+        guard case let .looked(config, reports, _, saveProblem) = round() else {
             return XCTFail("Expected the jobs to be looked at")
         }
 
@@ -60,7 +60,7 @@ final class WatchSessionTests: WatchTestCase {
         try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: folder.path)
         defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: folder.path) }
 
-        guard case let .looked(_, reports, saveProblem) = round() else {
+        guard case let .looked(_, reports, _, saveProblem) = round() else {
             return XCTFail("Expected the jobs to be looked at")
         }
 
@@ -77,15 +77,48 @@ final class WatchSessionTests: WatchTestCase {
 
         try writeConfig(Self.configText(jobs: "{ id: 'other', schedule: { every: '1h' }, checks: [ { type: 'file-age', path: '/b/*' } ] }"))
 
-        guard case let .looked(_, reports, _) = round() else {
+        guard case let .looked(_, reports, _, _) = round() else {
             return XCTFail("Expected the jobs to be looked at")
         }
         XCTAssertEqual(reports.map(\.id), ["other"])
         XCTAssertEqual(try HistoryFile(url: historyURL).load().jobs.keys.sorted(), ["other"])
     }
 
-    private func round() -> WatchSession.Outcome {
-        WatchSession(configURL: configURL, historyFile: HistoryFile(url: historyURL), watch: watch).round(now: now, calendar: calendar)
+    // MARK: - Announcing
+
+    func testARoundThatAnnouncesTellsAProblemOnceAndRemembersHavingToldIt() throws {
+        try addFailingAgent()
+        try writeConfig(Self.configText(jobs: Self.failingAgentJob))
+
+        XCTAssertEqual(alerts(of: round(announce: true)), [
+            Alert(kind: .problem(.failed), jobID: "report", jobName: "Nightly report", hostID: "local", reason: "its last run exited with code 3")
+        ])
+        XCTAssertEqual(try HistoryFile(url: historyURL).load().jobs["report"]?.alerted, .failed)
+        XCTAssertEqual(alerts(of: round(announce: true)), [])
+    }
+
+    func testARoundThatDoesNotAnnounceLeavesTheProblemToBeTold() throws {
+        try addFailingAgent()
+        try writeConfig(Self.configText(jobs: Self.failingAgentJob))
+
+        XCTAssertEqual(alerts(of: round()), [])
+        XCTAssertNil(try HistoryFile(url: historyURL).load().jobs["report"]?.alerted)
+        XCTAssertEqual(alerts(of: round(announce: true))?.map(\.kind), [.problem(.failed)])
+        // And a look that does not announce afterwards does not forget that it was told.
+        XCTAssertEqual(alerts(of: round()), [])
+        XCTAssertEqual(alerts(of: round(announce: true)), [])
+    }
+
+    private func alerts(of outcome: WatchSession.Outcome) -> [Alert]? {
+        if case let .looked(_, _, alerts, _) = outcome {
+            return alerts
+        }
+        return nil
+    }
+
+    private func round(announce: Bool = false) -> WatchSession.Outcome {
+        WatchSession(configURL: configURL, historyFile: HistoryFile(url: historyURL), watch: watch)
+            .round(now: now, calendar: calendar, announce: announce)
     }
 
     private func writeConfig(_ text: String) throws {

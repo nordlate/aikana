@@ -64,7 +64,7 @@ extension CheckOutcome.Result {
 extension HostGroup {
     /// The machine's name as a heading.
     var title: String {
-        host.id == "local" ? "This Mac" : host.id
+        host.displayName
     }
 }
 

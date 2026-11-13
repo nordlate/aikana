@@ -39,13 +39,14 @@ macOS menu bar app (deployment target: macOS 15.3, Swift 6 language mode) on top
 ```
 Ajoissa/                  The app: MenuBarExtra, SwiftUI views, notifications. No Dock icon (LSUIElement).
   App/                    Entry point
-  Features/               Watch/ (WatchModel), StatusMenu/ (panel, list, footer), JobDetail/
+  Features/               Watch/ (WatchModel), StatusMenu/ (panel, list, footer), JobDetail/,
+                          Notifications/ (SystemNotifier, PanelOpener)
 AjoissaTests/             XCTest, hosted in the app
 Packages/AjoissaCore/     The engine
   Sources/AjoissaCore/    Config/ (model, validating loader), Launchd/ (plist reader, launchctl parser, collector),
                           Evaluation/ (Timetable, Evidence, JobEvaluator, JobRecord, History),
                           Checks/ (HostAccess, LocalHost, CheckRunner, CheckState, JobAssessor),
-                          Watch/ (JobReport, LocalWatch, WatchSession, LogTail),
+                          Watch/ (JobReport, LocalWatch, WatchSession, LogTail, Alert),
                           Support/ (CommandRunner). Later: systemd and cron collectors
   Sources/AjoissaCLI/     `ajoissa` command line tool (product name `ajoissa`)
   Tests/AjoissaCoreTests/ XCTest
@@ -65,6 +66,7 @@ The Xcode project uses `PBXFileSystemSynchronizedRootGroup`: new files under `Aj
 - **Checks reach the job's machine only through `HostAccess`.** `CheckRunner` never touches `FileManager` or `Process`; `LocalHost` does it for this Mac and an SSH host will do it for others, so a check behaves the same everywhere. A check has three results, and "could not be carried out" is never reported as failed. Every check type needs tests for pass, fail and could-not-run, with the exact message. A passing check may claim to prove a run (`provesRunAt`) only with the time the proof is from; the evaluator credits the run at that time, never at "now".
 - **`JobAssessor.assess` is the one way to look at a job.** It evaluates, runs the checks against the run the evaluation expects, and evaluates again. Callers (the CLI, later the app) do not call `CheckRunner` or `JobEvaluator` themselves.
 - **`WatchSession.round` is one look at everything**: read the config, read the history, look at every job (`LocalWatch`), save. The CLI and the app both call it and nothing else; the app's `WatchModel` only decides when, and turns the outcome into what is shown. What a view shows about a job comes from its `JobReport`; add a field there, with a test, before reaching into the engine from a view.
+- **`AlertPlanner` decides what the user is told, once per incident.** It reads only the states the evaluator gave and keeps what was told in `JobRecord.alerted`. Only a round asked to `announce` runs it; the CLI never does, or it would use up what the app has yet to tell. The app turns its alerts into one `Announcement` per look and hands it to `SystemNotifier`; whether to tell at all (the menu switches) is the model's part. A new kind of alert needs planner tests for no-repeat, recovery and grouping.
 - **The app never watches while it hosts tests.** `AjoissaApp` does not start the model under XCTest, so a test run cannot read the user's jobs or write the user's history. `WatchModel` takes everything from outside through `WatchModel.Environment`; tests pass their own.
 - **Try the app on scratch files.** Launch the built binary with `AJOISSA_CONFIG` and `AJOISSA_HISTORY` set, not against the user's own config and history.
 - **Collectors gather, the evaluator judges.** A collector turns what it read into `Evidence` and never decides a `JobState` itself.

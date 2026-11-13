@@ -90,7 +90,7 @@ func status(_ arguments: [String]) throws(Stop) {
         throw Stop(code: .invalidConfig)
     case let .historyProblem(error):
         throw historyProblem(error)
-    case let .looked(_, reports, saveProblem):
+    case let .looked(_, reports, _, saveProblem):
         reports.forEach(show)
         if let saveProblem {
             throw historyProblem(saveProblem)
