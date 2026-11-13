@@ -8,7 +8,7 @@ Ajoissa watches scheduled jobs (launchd on Macs, systemd timers and cron on Linu
 
 ## Status
 
-Early. For jobs on this Mac, `ajoissa status` gives a verdict on each job: whether the run that was last due happened, failed or is missing, and whether it left behind what its checks ask for. Jobs on other machines are not read yet, and the app shows an empty menu bar panel. The plan is in the issues, in three milestones: one Mac, other machines, release.
+Early. For jobs on this Mac, `ajoissa status` gives a verdict on each job: whether the run that was last due happened, failed or is missing, and whether it left behind what its checks ask for. The menu bar app shows the same verdicts and keeps them current. Jobs on other machines are listed and not read yet, and there are no notifications yet. The plan is in the issues, in three milestones: one Mac, other machines, release.
 
 ## Config
 
@@ -23,6 +23,18 @@ swift run ajoissa validate --config ~/.config/ajoissa/config.json5
 
 `validate` lists every problem at once, each with where it is, and exits with 0 for a usable file, 1 for a file that breaks a rule and 66 for a file it cannot read. Settings it does not know, and settings written twice in the same object, are reported as errors, so a misspelled or repeated setting is not silently ignored.
 
+## The app
+
+The menu bar icon has three states: everything is fine, something needs attention (a run is missing, a job has been unreadable for a day, a machine cannot be reached, or the config or history file cannot be used), and a job failed.
+
+The panel lists the jobs by machine, those that need a look first. A job opens to its schedule, what its scheduler said, each check with its result, the verdicts it has been through, and the end of its log with a button that opens the file.
+
+Ajoissa looks at every job once a minute, when the Mac wakes, and when you press refresh (⌘R). It reads the config file again within a few seconds of a change. A config that cannot be used is shown with every problem in it, in place of the list; fix the file and the list comes back by itself.
+
+The menu at the bottom opens the config file, shows the history folder, and sets whether Ajoissa opens at login.
+
+The app uses the same config and history files as `ajoissa status`, and honours `AJOISSA_CONFIG` and `AJOISSA_HISTORY`.
+
 ## What Ajoissa runs and reads
 
 Ajoissa only reads. On this Mac it runs one command and reads one kind of file:
@@ -31,6 +43,8 @@ Ajoissa only reads. On this Mac it runs one command and reads one kind of file:
 - The plist files in `~/Library/LaunchAgents`, `/Library/LaunchAgents` and `/Library/LaunchDaemons`, to find each job's timetable and log paths, and the plist launchd says a job was loaded from.
 - The modification time of each job's log files, and when this Mac last woke or started.
 - For the checks you configure: the names, sizes and modification times of the files a `file-age` or `file-size` path matches (never their contents), and for a `log-pattern` check the part of the log the run wrote, plus the last 64 bytes of the log to recognise it by next time. Those bytes are kept in the history file.
+
+- In the app, when you open a job: the last 16000 bytes of each of its log files, to show them. They are not kept.
 
 Beyond that it runs only what you tell it to: the program of each `command` check, with the arguments as written and without a shell.
 
@@ -87,6 +101,8 @@ A job can exit with code 0 and still have produced nothing. Checks say what a su
 - **`log-pattern` needs runs it can tell apart.** For a job on an interval, or one with no timetable, it reads the output of the latest run that was seen. A job with no source and an `every` schedule cannot have one; the config refuses it.
 
 ### Limits
+
+- **The app and `ajoissa status` at the same moment.** Both read the history, look, and write it back. If the two overlap, what the one that finishes first saw is overwritten. It is seen again at the next look.
 
 - **Switched off at the scheduled time.** launchd does not make up for a time that passed while the Mac was off. Ajoissa reports that as missed once the grace after starting is over. It is true, even though nothing is wrong with the job.
 - **Looking only now and then.** The run count has no timestamps. When Ajoissa has not looked for a while, it compares how many runs started with how many were scheduled. A run started by hand in that gap can then stand in for a scheduled one that did not happen, and a reload after an unseen run can hide it. With the app looking every minute this does not arise.

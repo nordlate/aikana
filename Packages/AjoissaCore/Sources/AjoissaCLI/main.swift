@@ -71,81 +71,49 @@ func validate(_ arguments: [String]) throws(Stop) {
     print("\(url.path): OK, \(config.jobs.count) jobs on \(config.hosts.count) hosts")
 }
 
-/// What `status` needs to look at the jobs on this Mac.
-struct LocalLook {
-    let collector: LaunchdCollector
-    let host: LocalHost
-    let awakeSince = SystemUptime.awakeSince()
-    let bootedAt = SystemUptime.bootedAt()
-
-    init(home: URL) {
-        let runner = ProcessCommandRunner()
-        collector = LaunchdCollector(runner: runner, locations: LaunchdSearchLocation.standard(homeDirectory: home, userID: getuid()))
-        host = LocalHost(homeDirectory: home, runner: runner)
-    }
-
-    /// Looks at one job, prints what was found and returns the record to keep. `nil` for a job that cannot be
-    /// looked at yet.
-    func assess(_ job: Job, previous: JobRecord?) -> JobRecord? {
-        guard job.hostID == Host.localID else {
-            print("  verdict:  not judged yet: only jobs on this Mac are supported so far")
-            return nil
+func status(_ arguments: [String]) throws(Stop) {
+    let (url, _) = try loadConfig("status", arguments)
+    let home = FileManager.default.homeDirectoryForCurrentUser
+    let session = WatchSession(
+        configURL: url,
+        historyFile: HistoryFile(environment: ProcessInfo.processInfo.environment, homeDirectory: home),
+        watch: LocalWatch(homeDirectory: home, userID: getuid())
+    )
+    switch session.round(now: Date(), calendar: .current) {
+    case let .configProblem(error):
+        // The file was usable a moment ago; it was changed in between.
+        printError("\(url.path): not usable")
+        error.lines.forEach { printError("  \($0)") }
+        throw Stop(code: .invalidConfig)
+    case let .historyProblem(error):
+        throw historyProblem(error)
+    case let .looked(_, reports, saveProblem):
+        reports.forEach(show)
+        if let saveProblem {
+            throw historyProblem(saveProblem)
         }
-        var evidence = Evidence(awakeSince: awakeSince, bootedAt: bootedAt)
-        var logPaths: [String] = []
-        switch job.source {
-        case let .launchd(label):
-            let observation = collector.observe(label: label)
-            logPaths = observation.logPaths
-            evidence.source = SourceEvidence(launchd: observation, logModified: FileTimes.latestModification(of: logPaths))
-            print("  launchd:  \(label)")
-            print("  schedule: \(observation.scheduleDescription)")
-            print("  state:    \(observation.statusDescription)")
-        case .systemd, .cron:
-            print("  verdict:  not judged yet: of the schedulers, only launchd is read so far")
-            return nil
-        case nil:
-            break
-        }
-        let assessment = JobAssessor.assess(
-            job: job,
-            evidence: evidence,
-            host: host,
-            defaultLogPaths: logPaths,
-            previous: previous,
-            now: Date(),
-            calendar: .current
-        )
-        for (check, outcome) in zip(job.checks, assessment.outcomes) {
-            print("  check:    \(check.label): \(outcome.summary)")
-        }
-        print("  verdict:  \(assessment.evaluation.state.rawValue): \(assessment.evaluation.reason)")
-        return assessment.evaluation.record
     }
 }
 
-func status(_ arguments: [String]) throws(Stop) {
-    let (_, config) = try loadConfig("status", arguments)
-    let home = FileManager.default.homeDirectoryForCurrentUser
-    let historyFile = HistoryFile(environment: ProcessInfo.processInfo.environment, homeDirectory: home)
-    var history: History
-    do {
-        history = try historyFile.load()
-    } catch {
-        throw historyProblem(error)
+func show(_ report: JobReport) {
+    let job = report.job
+    print(job.name == job.id ? job.id : "\(job.id) (\(job.name))")
+    if let source = report.source, let status = report.sourceStatus {
+        let (scheduler, name) = source.split(separator: " ", maxSplits: 1).map(String.init).pair
+        print("  \(scheduler):".padding(toLength: 12, withPad: " ", startingAt: 0) + name)
+        print("  schedule: \(report.schedule)")
+        print("  state:    \(status)")
     }
-    let look = LocalLook(home: home)
-    for job in config.jobs {
-        print(job.name == job.id ? job.id : "\(job.id) (\(job.name))")
-        if let record = look.assess(job, previous: history.jobs[job.id]) {
-            history.jobs[job.id] = record
-        }
+    for check in report.checks {
+        print("  check:    \(check.label): \(check.outcome.summary)")
     }
-    history.keepOnly(jobIDs: config.jobs.map(\.id))
-    do {
-        try historyFile.save(history)
-    } catch {
-        throw historyProblem(error)
+    print("  verdict:  \(report.isJudged ? "\(report.state.rawValue): " : "")\(report.reason)")
+}
+
+extension Array where Element == String {
+    /// The first two elements; empty text for one that is not there.
+    var pair: (String, String) {
+        (first ?? "", count > 1 ? self[1] : "")
     }
 }
 
