@@ -54,10 +54,13 @@ public struct ProcessCommandRunner: CommandRunner {
             throw .notStarted(reason: error.localizedDescription)
         }
 
-        // Both streams are drained while the program runs; a program that fills a pipe nobody reads would hang.
-        let reading = DispatchGroup()
-        let collectedOutput = Self.collect(output, in: reading)
-        let collectedErrorOutput = Self.collect(errorOutput, in: reading)
+        // Both streams are read as the program writes; a program that fills a pipe nobody reads would hang.
+        let collectedOutput = Collected(reading: output.fileHandleForReading)
+        let collectedErrorOutput = Collected(reading: errorOutput.fileHandleForReading)
+        defer {
+            collectedOutput.stop()
+            collectedErrorOutput.stop()
+        }
 
         guard exited.wait(timeout: .now() + timeout) == .success else {
             process.terminate()
@@ -66,8 +69,11 @@ public struct ProcessCommandRunner: CommandRunner {
             }
             throw .timedOut(after: timeout)
         }
-        // A program can exit while something it started still holds the pipe open, so the wait has a limit.
-        _ = reading.wait(timeout: .now() + Self.patience)
+        // Normally both streams end as the program exits. If the program left something running that still holds
+        // them open, they never end; what the program itself wrote has arrived by then, so stop waiting.
+        let deadline = DispatchTime.now() + Self.patience
+        collectedOutput.waitForEnd(until: deadline)
+        collectedErrorOutput.waitForEnd(until: deadline)
         return CommandResult(
             exitCode: process.terminationStatus,
             output: collectedOutput.text,
@@ -75,22 +81,33 @@ public struct ProcessCommandRunner: CommandRunner {
         )
     }
 
-    private static func collect(_ pipe: Pipe, in group: DispatchGroup) -> Collected {
-        let collected = Collected()
-        let handle = pipe.fileHandleForReading
-        DispatchQueue.global().async(group: group) {
-            collected.set(handle.readDataToEndOfFile())
-        }
-        return collected
-    }
-
-    /// Output read on another thread.
+    /// Everything a stream has delivered so far, gathered on a background queue as it arrives.
     private final class Collected: @unchecked Sendable {
         private let lock = NSLock()
         private var data = Data()
+        private let ended = DispatchSemaphore(value: 0)
+        private let handle: FileHandle
 
-        func set(_ data: Data) {
-            lock.withLock { self.data = data }
+        init(reading handle: FileHandle) {
+            self.handle = handle
+            handle.readabilityHandler = { [weak self] handle in
+                let chunk = handle.availableData
+                guard let self else { return }
+                if chunk.isEmpty {
+                    handle.readabilityHandler = nil
+                    self.ended.signal()
+                } else {
+                    self.lock.withLock { self.data.append(chunk) }
+                }
+            }
+        }
+
+        func waitForEnd(until deadline: DispatchTime) {
+            _ = ended.wait(timeout: deadline)
+        }
+
+        func stop() {
+            handle.readabilityHandler = nil
         }
 
         var text: String {

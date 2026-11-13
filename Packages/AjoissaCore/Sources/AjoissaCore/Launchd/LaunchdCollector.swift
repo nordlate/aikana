@@ -96,20 +96,26 @@ public struct LaunchdCollector: Sendable {
         guard PlainName.isValid(label) else {
             return LaunchdObservation(label: label, status: .unknown(reason: "the label is not a plain name"))
         }
-        let found = locate(label: label)
-        // Without a plist the job may still have been loaded from somewhere else, in either domain.
-        let domains = (found?.location?.domain).map { [$0] } ?? uniqueDomains
-        for domain in domains {
+        let search = locate(label: label)
+        let found = search.found
+        // The folder a plist is in says where the job should be loaded, so that domain is asked first. The others
+        // are asked too: a job can be loaded from another file, and without a plist it can be loaded anywhere.
+        let expectedDomain = found?.location?.domain
+        for domain in [expectedDomain].compactMap({ $0 }) + uniqueDomains.filter({ $0 != expectedDomain }) {
             switch query(label: label, in: domain) {
             case .notFound:
                 continue
             case let .failed(reason):
                 return observation(label, .unknown(reason: reason), domain: domain, found: found)
             case let .state(state):
-                return observation(label, .loaded(state), domain: domain, found: found ?? definition(at: state.plistPath))
+                return observation(label, .loaded(state), domain: domain, found: loadedDefinition(state, found: found))
             }
         }
-        return observation(label, found == nil ? .plistMissing : .notLoaded, domain: found?.location?.domain, found: found)
+        if found == nil, let unreadable = search.unreadable.first {
+            let reason = "\(unreadable) could not be read, so it is not known whether the job has a plist"
+            return observation(label, .unknown(reason: reason), domain: nil, found: nil)
+        }
+        return observation(label, found == nil ? .plistMissing : .notLoaded, domain: expectedDomain, found: found)
     }
 
     // MARK: - launchctl
@@ -159,6 +165,12 @@ public struct LaunchdCollector: Sendable {
         let problem: String?
     }
 
+    private struct Search {
+        var found: Found?
+        /// Files and folders that exist, or may exist, but could not be read.
+        var unreadable: [String] = []
+    }
+
     private func observation(_ label: String, _ status: LaunchdObservation.Status, domain: LaunchdDomain?, found: Found?) -> LaunchdObservation {
         LaunchdObservation(
             label: label,
@@ -172,42 +184,96 @@ public struct LaunchdCollector: Sendable {
 
     /// Finds the plist that defines `label`. A plist is usually named after its label, but does not have to be,
     /// so the folders are searched by content when no file has the expected name.
-    private func locate(label: String) -> Found? {
+    private func locate(label: String) -> Search {
+        var search = Search()
         for location in locations {
             let expected = location.directory.appending(path: "\(label).plist")
-            if let data = try? Data(contentsOf: expected) {
+            switch Self.contents(of: expected) {
+            case .missing:
+                continue
+            case .unreadable:
+                search.unreadable.append(expected.path)
+            case let .data(data):
                 switch Self.read(data) {
                 case let .success(definition) where definition.label == label:
-                    return Found(location: location, path: expected.path, definition: definition, problem: nil)
+                    search.found = Found(location: location, path: expected.path, definition: definition, problem: nil)
+                    return search
                 case .success:
-                    break
+                    continue
                 case let .failure(error):
-                    return Found(location: location, path: expected.path, definition: nil, problem: error.reason)
+                    search.found = Found(location: location, path: expected.path, definition: nil, problem: error.reason)
+                    return search
                 }
             }
         }
         for location in locations {
-            let files = (try? FileManager.default.contentsOfDirectory(at: location.directory, includingPropertiesForKeys: nil)) ?? []
-            for file in files.sorted(by: { $0.path < $1.path }) where file.pathExtension == "plist" {
-                guard let data = try? Data(contentsOf: file), case let .success(definition) = Self.read(data),
+            guard let names = Self.plistNames(in: location.directory) else {
+                search.unreadable.append(location.directory.path)
+                continue
+            }
+            for name in names {
+                // The path is built from the folder as it was given; a listing would resolve symbolic links in it.
+                let file = location.directory.appending(path: name)
+                guard case let .data(data) = Self.contents(of: file), case let .success(definition) = Self.read(data),
                       definition.label == label else { continue }
-                // The listing resolves symbolic links in the folder's path; keep the path as the folder was given.
-                let path = location.directory.appending(path: file.lastPathComponent).path
-                return Found(location: location, path: path, definition: definition, problem: nil)
+                search.found = Found(location: location, path: file.path, definition: definition, problem: nil)
+                return search
             }
         }
-        return nil
+        return search
     }
 
-    /// The definition at a path that launchd itself reported, for a job loaded from outside the search folders.
-    private func definition(at path: String?) -> Found? {
-        guard let path, let data = try? Data(contentsOf: URL(fileURLWithPath: path)) else { return nil }
+    /// The definition that goes with a loaded job. launchd says which file it loaded the job from; when that is
+    /// not the file found in the search folders, the file launchd names is the one that counts.
+    private func loadedDefinition(_ state: LaunchdServiceState, found: Found?) -> Found? {
+        // launchd also reports things that are not paths here, such as "(submitted by smd.545)".
+        guard let reported = state.plistPath, reported.hasPrefix("/") else { return found }
+        if let found, Self.resolved(found.path) == Self.resolved(reported) {
+            return found
+        }
+        guard case let .data(data) = Self.contents(of: URL(fileURLWithPath: reported)) else { return found }
         switch Self.read(data) {
         case let .success(definition):
-            return Found(location: nil, path: path, definition: definition, problem: nil)
+            return Found(location: nil, path: reported, definition: definition, problem: nil)
         case let .failure(error):
-            return Found(location: nil, path: path, definition: nil, problem: error.reason)
+            return Found(location: nil, path: reported, definition: nil, problem: error.reason)
         }
+    }
+
+    private static func resolved(_ path: String) -> String {
+        URL(fileURLWithPath: path).resolvingSymlinksInPath().path
+    }
+
+    private enum Contents {
+        case data(Data)
+        case missing
+        /// The file may exist, but reading it failed for another reason than its absence.
+        case unreadable
+    }
+
+    private static func contents(of url: URL) -> Contents {
+        do {
+            return .data(try Data(contentsOf: url))
+        } catch {
+            return isNoSuchFile(error) ? .missing : .unreadable
+        }
+    }
+
+    /// The names of the plist files in a folder, sorted. Empty when the folder does not exist, `nil` when it
+    /// exists but cannot be read.
+    private static func plistNames(in directory: URL) -> [String]? {
+        do {
+            return try FileManager.default.contentsOfDirectory(atPath: directory.path)
+                .filter { $0.hasSuffix(".plist") }
+                .sorted()
+        } catch {
+            return isNoSuchFile(error) ? [] : nil
+        }
+    }
+
+    private static func isNoSuchFile(_ error: any Error) -> Bool {
+        let error = error as NSError
+        return error.domain == NSCocoaErrorDomain && [NSFileReadNoSuchFileError, NSFileNoSuchFileError].contains(error.code)
     }
 
     private static func read(_ data: Data) -> Result<LaunchdJobDefinition, LaunchdPlistError> {

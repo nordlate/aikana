@@ -22,6 +22,8 @@ final class LaunchdCollectorTests: XCTestCase {
     }
 
     override func tearDownWithError() throws {
+        // A test may have locked the folder; unlock it so it can be removed.
+        try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: agents.path)
         try FileManager.default.removeItem(at: root)
     }
 
@@ -52,7 +54,12 @@ final class LaunchdCollectorTests: XCTestCase {
         XCTAssertEqual(observation.status, .notLoaded)
         XCTAssertEqual(observation.plistPath, plist.path)
         XCTAssertEqual(observation.definition?.scheduleDescription, "daily at 02:00")
-        XCTAssertEqual(runner.calls, [["/bin/launchctl", "print", "gui/501/com.example.job"]])
+        XCTAssertEqual(observation.domain, .user(id: 501))
+        // Every domain is asked before the job is called not loaded: it may be loaded where its plist is not.
+        XCTAssertEqual(runner.calls, [
+            ["/bin/launchctl", "print", "gui/501/com.example.job"],
+            ["/bin/launchctl", "print", "system/com.example.job"]
+        ])
     }
 
     func testNoPlistAndNotLoadedAnywhere() {
@@ -79,6 +86,59 @@ final class LaunchdCollectorTests: XCTestCase {
         XCTAssertEqual(state.runState, .running)
         XCTAssertEqual(observation.domain, .system)
         XCTAssertEqual(runner.calls, [["/bin/launchctl", "print", "system/com.example.updater"]])
+    }
+
+    func testJobLoadedInAnotherDomainThanItsPlistFolderIsLoaded() throws {
+        let plist = try write(label: "com.example.updater", in: agents)
+        runner.answer("system/com.example.updater", output: LaunchdFixture.daemonRunning.text)
+
+        let observation = collector.observe(label: "com.example.updater")
+
+        guard case let .loaded(state) = observation.status else {
+            return XCTFail("Expected loaded, got \(observation.status)")
+        }
+        XCTAssertEqual(state.runState, .running)
+        XCTAssertEqual(observation.domain, .system)
+        // The file launchd names does not exist here, so the one that was found is still the best there is.
+        XCTAssertEqual(observation.plistPath, plist.path)
+        XCTAssertEqual(runner.calls, [
+            ["/bin/launchctl", "print", "gui/501/com.example.updater"],
+            ["/bin/launchctl", "print", "system/com.example.updater"]
+        ])
+    }
+
+    func testDefinitionComesFromTheFileLaunchdLoadedNotFromAnotherWithTheSameLabel() throws {
+        try write(label: "com.example.job", in: agents, extra: ["StartInterval": 60])
+        let loadedFrom = try write(label: "com.example.job", in: root, extra: ["StartInterval": 900])
+        runner.answer("gui/501/com.example.job", output: "gui/501/com.example.job = {\n\tpath = \(loadedFrom.path)\n}\n")
+
+        let observation = collector.observe(label: "com.example.job")
+
+        XCTAssertEqual(observation.plistPath, loadedFrom.path)
+        XCTAssertEqual(observation.definition?.startInterval, 900)
+    }
+
+    func testSameFileReportedThroughAnotherPathIsTheSameFile() throws {
+        let plist = try write(label: "com.example.job", in: agents, extra: ["StartInterval": 60])
+        let resolved = plist.resolvingSymlinksInPath().path
+        runner.answer("gui/501/com.example.job", output: "gui/501/com.example.job = {\n\tpath = \(resolved)\n}\n")
+
+        let observation = collector.observe(label: "com.example.job")
+
+        XCTAssertEqual(observation.plistPath, plist.path)
+        XCTAssertEqual(observation.definition?.startInterval, 60)
+    }
+
+    /// launchd reports "(submitted by smd.545)" and the like for jobs that have no plist file.
+    func testReportedPathThatIsNotAPathIsNotRead() {
+        runner.answer("gui/501/com.example.job", output: "gui/501/com.example.job = {\n\tpath = (submitted by smd.545)\n}\n")
+
+        let observation = collector.observe(label: "com.example.job")
+
+        XCTAssertEqual(observation.status, .loaded(LaunchdServiceState(plistPath: "(submitted by smd.545)")))
+        XCTAssertNil(observation.plistPath)
+        XCTAssertNil(observation.definition)
+        XCTAssertNil(observation.definitionProblem)
     }
 
     func testPlistNamedDifferentlyFromItsLabelIsFoundByContent() throws {
@@ -149,6 +209,46 @@ final class LaunchdCollectorTests: XCTestCase {
     }
 
     // MARK: - When the state cannot be read
+
+    func testFolderThatCannotBeReadIsUnknownNotMissing() throws {
+        let plist = try write(label: "com.example.job", in: agents)
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: agents.path)
+
+        let observation = collector.observe(label: "com.example.job")
+
+        XCTAssertEqual(
+            observation.status,
+            .unknown(reason: "\(plist.path) could not be read, so it is not known whether the job has a plist")
+        )
+    }
+
+    func testPlistThatCannotBeReadIsUnknownNotMissing() throws {
+        let plist = try write(label: "com.example.job", in: agents)
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: plist.path)
+
+        let observation = collector.observe(label: "com.example.job")
+
+        XCTAssertEqual(
+            observation.status,
+            .unknown(reason: "\(plist.path) could not be read, so it is not known whether the job has a plist")
+        )
+    }
+
+    func testFolderThatCannotBeReadDoesNotHideALoadedJob() throws {
+        try write(label: "com.example.exit-3", in: agents)
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: agents.path)
+        runner.answer("gui/501/com.example.exit-3", output: LaunchdFixture.agentExit3.text)
+
+        guard case .loaded = collector.observe(label: "com.example.exit-3").status else {
+            return XCTFail("Expected loaded")
+        }
+    }
+
+    func testFolderThatDoesNotExistIsSimplyEmpty() throws {
+        try FileManager.default.removeItem(at: daemons)
+
+        XCTAssertEqual(collector.observe(label: "com.example.job").status, .plistMissing)
+    }
 
     func testLaunchctlFailingIsUnknownNotMissing() throws {
         try write(label: "com.example.job", in: agents)

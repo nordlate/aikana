@@ -36,12 +36,31 @@ final class ProcessCommandRunnerTests: XCTestCase {
         }
     }
 
-    func testProgramThatRunsTooLongIsStopped() {
+    func testProgramThatRunsTooLongIsStopped() throws {
+        let pidFile = FileManager.default.temporaryDirectory.appending(path: "ajoissa-pid-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: pidFile) }
         let started = Date()
 
-        XCTAssertThrowsError(try runner.run("/bin/sleep", arguments: ["30"], timeout: 0.3)) { error in
-            XCTAssertEqual(error as? CommandError, .timedOut(after: 0.3))
+        // "exec" makes sleep take over the shell's process, so the recorded id is the one that must be stopped.
+        XCTAssertThrowsError(try runner.run("/bin/sh", arguments: ["-c", "echo $$ > '\(pidFile.path)'; exec sleep 30"], timeout: 0.5)) { error in
+            XCTAssertEqual(error as? CommandError, .timedOut(after: 0.5))
         }
+
+        XCTAssertLessThan(Date().timeIntervalSince(started), 5)
+        let recorded = try String(contentsOf: pidFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
+        let pid = try XCTUnwrap(Int32(recorded))
+        // Signal 0 only asks whether the process exists.
+        XCTAssertEqual(kill(pid, 0), -1, "the process is still there")
+    }
+
+    /// A program can exit while something it started keeps its output open. What the program wrote must still
+    /// be returned, and the call must not wait for the leftover process.
+    func testOutputIsKeptWhenTheProgramLeavesSomethingRunning() throws {
+        let started = Date()
+
+        let result = try runner.run("/bin/sh", arguments: ["-c", "echo hi; echo oops >&2; sleep 6 &"], timeout: 10)
+
+        XCTAssertEqual(result, CommandResult(exitCode: 0, output: "hi\n", errorOutput: "oops\n"))
         XCTAssertLessThan(Date().timeIntervalSince(started), 5)
     }
 }
