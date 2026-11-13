@@ -43,7 +43,8 @@ Ajoissa/                  The app: MenuBarExtra, SwiftUI views, notifications. N
 AjoissaTests/             XCTest, hosted in the app
 Packages/AjoissaCore/     The engine
   Sources/AjoissaCore/    Config/ (model, validating loader), Launchd/ (plist reader, launchctl parser, collector),
-                          Support/ (CommandRunner). Later: systemd and cron collectors, run evaluation, checks
+                          Evaluation/ (Timetable, Evidence, JobEvaluator, JobRecord, History),
+                          Support/ (CommandRunner). Later: systemd and cron collectors, checks
   Sources/AjoissaCLI/     `ajoissa` command line tool (product name `ajoissa`)
   Tests/AjoissaCoreTests/ XCTest
 ```
@@ -58,6 +59,8 @@ The Xcode project uses `PBXFileSystemSynchronizedRootGroup`: new files under `Aj
 - **Nothing personal in the repo.** No real host names, user names, paths or job names in sources, tests, fixtures or examples. Use made-up ones.
 - **Remote commands** (once SSH support exists) must be read-only, built without string concatenation into a shell, and listed in one place in the code and in the README.
 - **Time is injected.** Schedule and evaluation logic takes the current time and its evidence as parameters; no `Date()` and no I/O inside it.
+- **`JobEvaluator` decides every alert.** It is a pure function of the job, the evidence, the previous record, the time and the calendar. Any change to it needs a scenario test in `Tests/AjoissaCoreTests/Evaluation/` written as a timeline (`Scenario`), and must keep these properties: an absent run is `missed` only after its deadline and only if the run was due while the job was being watched; unreadable state is `unknown`, never `missed` or `failed`; evidence from the future is ignored; a failing check does not fail a job whose run still has time.
+- **Collectors gather, the evaluator judges.** A collector turns what it read into `Evidence` and never decides a `JobState` itself.
 - **Not sandboxed, hardened runtime on.** Do not enable the App Sandbox.
 - **The config is validated in one place.** `ConfigLoader` is the only way to get a `Config`, and it reports every problem with a path and a message written for a person. A new setting needs: the model, the parser, a test per rule with the exact message, and an entry in `Packages/AjoissaCore/Examples/config.example.json5`. Unknown settings are errors.
 - **Values that reach another program must stay one harmless word.** Host aliases, launchd labels and unit names may only contain letters, digits and a few listed punctuation characters, and may not start with `-`: they end up as arguments to `launchctl` and `ssh`, and ssh hands its command to a remote shell. Free text (paths, patterns, cron text) must be a single line. Do not loosen these without a test that shows the value is quoted safely where it is used.

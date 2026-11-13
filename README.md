@@ -8,7 +8,7 @@ Ajoissa watches scheduled jobs (launchd on Macs, systemd timers and cron on Linu
 
 ## Status
 
-Early. The config file format and its validation exist, and launchd jobs on this Mac can be read: `ajoissa status` shows each one's timetable and what launchd knows about it. Nothing judges yet whether a job ran when it should have, and the app shows an empty menu bar panel. The plan is in the issues, in three milestones: one Mac, other machines, release.
+Early. For launchd jobs on this Mac, `ajoissa status` now gives a verdict on each job: whether the run that was last due happened, failed or is missing. Outcome checks are described in the config but not run yet, jobs on other machines are not read, and the app shows an empty menu bar panel. The plan is in the issues, in three milestones: one Mac, other machines, release.
 
 ## Config
 
@@ -29,11 +29,35 @@ Ajoissa only reads. On this Mac it runs one command and reads one kind of file:
 
 - `/bin/launchctl print gui/<your user id>/<label>` or `/bin/launchctl print system/<label>`, for each launchd job in your config. The label is refused unless it is one plain word.
 - The plist files in `~/Library/LaunchAgents`, `/Library/LaunchAgents` and `/Library/LaunchDaemons`, to find each job's timetable and log paths, and the plist launchd says a job was loaded from.
+- The modification time of each job's log files (never their contents), and when this Mac last woke or started.
 
 ```sh
 cd Packages/AjoissaCore
 swift run ajoissa status --config ~/.config/ajoissa/config.json5
 ```
+
+## How a job is judged
+
+Each time Ajoissa looks at a job it asks one question: did the run that was last due happen?
+
+| Verdict | Meaning |
+| --- | --- |
+| `ok` | The run that was last due happened and nothing about it failed. |
+| `running` | The job is running now. |
+| `waiting` | A run is due and still within its grace period, or no run has been due since Ajoissa started watching. |
+| `failed` | The last run exited with an error or was killed, a check failed, or the job cannot run at all (not loaded, or not found). |
+| `missed` | A run was due, its grace period is over, and there is no sign of it. |
+| `unknown` | The job's state could not be read just now. This says nothing about the job. |
+| `stale` | The state has been unreadable for a day. |
+| `hostOffline` | The machine the job runs on cannot be reached. |
+
+Things worth knowing:
+
+- **Evidence of a run** is the scheduler's run count going up, the job's log file being written, or a check that proves it (a file newer than the scheduled time).
+- **Grace** (`grace` in the config, 30 minutes by default) is how long after its scheduled time a run may still appear before it counts as missed.
+- **Sleep.** launchd makes up for a scheduled time that passed while the Mac slept by running the job on wake. The grace period then counts from the wake, so a job is not reported as missed the moment the lid opens.
+- **Nothing is judged in hindsight.** A run that was due before Ajoissa first saw the job, or before its timetable changed, is not called missed. Evidence that it did happen is still believed.
+- **History** is kept in `~/Library/Application Support/Ajoissa/history.json` (or the file `AJOISSA_HISTORY` names). launchd keeps no history of its own, so this file is what makes "the run count went up since last time" possible. A history file that cannot be read stops Ajoissa instead of being replaced.
 
 ## Layout
 
