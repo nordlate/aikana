@@ -26,6 +26,7 @@ public enum ConfigLoader {
             throw .invalid([ConfigIssue(path: "", message: "The file must contain one object with version, hosts and jobs.")])
         }
         let issues = IssueCollector()
+        DuplicateKeyScanner.duplicates(in: data).forEach { issues.add("line \($0.line)", $0.message) }
         let config = ConfigParser(issues: issues).config(from: values)
         guard issues.issues.isEmpty else {
             throw .invalid(issues.issues)
@@ -63,7 +64,7 @@ struct ConfigParser {
         var hosts = [Host.local]
         var declaredIDs: Set<String> = [Host.localID]
         for var reader in root.elements("hosts") {
-            let id = identifier(&reader, taken: hosts.map(\.id), reserved: Host.localID)
+            let id = identifier(&reader, taken: Array(declaredIDs), reserved: Host.localID)
             let alias = sshAlias(&reader)
             let mayBeOffline = reader.bool("mayBeOffline") ?? false
             reader.finish()
@@ -80,7 +81,7 @@ struct ConfigParser {
     private func sshAlias(_ reader: inout ObjectReader) -> String? {
         guard let alias = reader.requiredString("ssh") else { return nil }
         guard Self.isPlainName(alias) else {
-            reader.report("ssh", "must be a host alias from ~/.ssh/config, without spaces and not starting with \"-\"")
+            reader.report("ssh", "must be a host alias from ~/.ssh/config: \(Self.plainNameRule)")
             return nil
         }
         return alias
@@ -107,11 +108,15 @@ struct ConfigParser {
         return text.count <= 64 && text.allSatisfy(allowed.contains)
     }
 
-    /// A name that is safe to hand to another program as one argument: no spaces or control characters,
-    /// and no leading "-" that the program could read as an option.
-    static func isPlainName(_ text: String) -> Bool {
-        !text.hasPrefix("-") && text.unicodeScalars.allSatisfy { scalar in
-            !CharacterSet.whitespacesAndNewlines.contains(scalar) && !CharacterSet.controlCharacters.contains(scalar)
-        }
+    static let plainNameRule = "letters, digits, \".\", \"_\" and \"-\" only, and not starting with \"-\""
+
+    /// A name that stays one harmless word wherever it ends up: as an argument to another program, or inside a
+    /// command line that a remote shell reads. Nothing a shell treats specially is allowed, and no leading "-"
+    /// that a program could read as an option.
+    ///
+    /// - Parameter extra: Further characters to allow for this kind of name.
+    static func isPlainName(_ text: String, extra: String = "") -> Bool {
+        let allowed = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-" + extra
+        return !text.isEmpty && !text.hasPrefix("-") && text.allSatisfy(allowed.contains)
     }
 }

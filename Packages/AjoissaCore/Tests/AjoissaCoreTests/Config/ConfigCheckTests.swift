@@ -47,7 +47,11 @@ final class ConfigCheckTests: XCTestCase {
 
     func testPathIsRequiredAndMustNotBeRelative() {
         XCTAssertEqual(issues("type: 'file-age'"), ["\(prefix).path: is required"])
-        for path in ["reports/x.md", "./x", "~user/x", "~"] {
+        XCTAssertEqual(
+            issues("type: 'file-age', path: '/a\\nb'"),
+            ["\(prefix).path: must be a single line without control characters"]
+        )
+        for path in ["reports/x.md", "./x", "~user/x", "~", "-rf"] {
             XCTAssertEqual(
                 issues("type: 'file-age', path: '\(path)'"),
                 ["\(prefix).path: must be an absolute path, or start with ~/ for the home directory on the job's host"],
@@ -106,6 +110,23 @@ final class ConfigCheckTests: XCTestCase {
         XCTAssertEqual(issues("type: 'command', run: ['']"), [message])
     }
 
+    func testProgramMustBeAnAbsolutePath() {
+        let message = "\(prefix).run: must start with the program's absolute path, such as \"/usr/bin/true\", because the search path differs between machines"
+
+        XCTAssertEqual(issues("type: 'command', run: ['rm', '-rf', '/tmp/x']"), [message])
+        XCTAssertEqual(issues("type: 'command', run: ['-c', 'true']"), [message])
+        XCTAssertEqual(issues("type: 'command', run: ['~/bin/check', '']"), [])
+    }
+
+    /// An argument cannot carry a NUL character, which would cut it short when the program is started.
+    /// The JSON5 reader refuses the escape, so no rule of our own is needed; this pins that behaviour down.
+    func testNULCannotBeWrittenInAString() {
+        let issues = issues("type: 'command', run: ['/usr/bin/true', 'a\\u0000b']")
+
+        XCTAssertEqual(issues.count, 1)
+        XCTAssertTrue(issues[0].hasPrefix("Not valid JSON5:"), issues[0])
+    }
+
     func testTimeoutHasAnUpperLimit() {
         XCTAssertEqual(
             issues("type: 'command', run: ['/usr/bin/true'], timeout: '11m'"),
@@ -123,6 +144,16 @@ final class ConfigCheckTests: XCTestCase {
         XCTAssertEqual(
             try ConfigFixture.check("type: 'log-pattern', path: '/var/log/x.log', contains: 'done', notContains: 'error'"),
             .logPattern(path: "/var/log/x.log", contains: "done", notContains: "error")
+        )
+    }
+
+    func testLogPatternTextMustBeOneLine() {
+        XCTAssertEqual(
+            issues("type: 'log-pattern', contains: 'a\\nb', notContains: 'c\\td'"),
+            [
+                "\(prefix).contains: must be a single line without control characters",
+                "\(prefix).notContains: must be a single line without control characters"
+            ]
         )
     }
 

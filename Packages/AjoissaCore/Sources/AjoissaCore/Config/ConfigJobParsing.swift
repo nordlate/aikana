@@ -22,7 +22,7 @@ extension ConfigParser {
     }
 
     private func job(_ reader: inout ObjectReader, id: String?, hostIDs: Set<String>) -> Job? {
-        let name = reader.string("name")
+        let name = reader.line("name")
         let hostID = host(&reader, known: hostIDs)
         let source = source(&reader)
         let schedule = schedule(&reader)
@@ -75,18 +75,18 @@ extension ConfigParser {
         guard let kind = onlyKind(in: reader, of: ["launchd", "systemd", "cron"]) else { return nil }
         let source: JobSource? = switch kind {
         case "launchd":
-            plainName(&reader, "launchd", what: "a launchd label").map { .launchd(label: $0) }
+            launchdLabel(&reader).map { .launchd(label: $0) }
         case "systemd":
             systemd(&reader)
         default:
-            reader.string("cron").map { .cron(matching: $0) }
+            reader.line("cron").map { .cron(matching: $0) }
         }
         reader.finish()
         return source
     }
 
     private func systemd(_ reader: inout ObjectReader) -> JobSource? {
-        let unit = plainName(&reader, "systemd", what: "a unit name")
+        let unit = reader.string("systemd")
         var scope = JobSource.SystemdScope.system
         if let text = reader.string("scope") {
             guard let given = JobSource.SystemdScope(rawValue: text) else {
@@ -96,8 +96,8 @@ extension ConfigParser {
             scope = given
         }
         guard let unit else { return nil }
-        guard unit.hasSuffix(".timer") || unit.hasSuffix(".service") else {
-            reader.report("systemd", "must be a unit name ending in .timer or .service")
+        guard Self.isUnitName(unit) else {
+            reader.report("systemd", "must be a unit name such as \"backup.timer\": letters, digits, \".\", \"_\", \"-\", \"@\" and \":\" only, not starting with \"-\", and ending in .timer or .service")
             return nil
         }
         return .systemd(unit: unit, scope: scope)
@@ -152,13 +152,22 @@ extension ConfigParser {
         return present[0]
     }
 
-    private func plainName(_ reader: inout ObjectReader, _ key: String, what: String) -> String? {
-        guard let name = reader.string(key) else { return nil }
-        guard Self.isPlainName(name) else {
-            reader.report(key, "must be \(what), without spaces and not starting with \"-\"")
+    private func launchdLabel(_ reader: inout ObjectReader) -> String? {
+        guard let label = reader.string("launchd") else { return nil }
+        guard Self.isPlainName(label) else {
+            reader.report("launchd", "must be a launchd label: \(Self.plainNameRule)")
             return nil
         }
-        return name
+        return label
+    }
+
+    /// A timer or service unit with a name of its own: not a bare suffix and not a template such as `job@.service`.
+    static func isUnitName(_ unit: String) -> Bool {
+        guard isPlainName(unit, extra: "@:"), let suffix = [".timer", ".service"].first(where: unit.hasSuffix) else {
+            return false
+        }
+        let stem = unit.dropLast(suffix.count)
+        return !stem.isEmpty && !stem.hasSuffix("@")
     }
 }
 

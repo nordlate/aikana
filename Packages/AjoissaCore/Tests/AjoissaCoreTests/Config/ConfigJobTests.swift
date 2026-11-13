@@ -46,6 +46,10 @@ final class ConfigJobTests: XCTestCase {
     }
 
     func testNameMustBeANonEmptyString() {
+        XCTAssertEqual(
+            issues("id: 'a', name: 'two\\nlines', \(launchd)"),
+            ["jobs[0] (a).name: must be a single line without control characters"]
+        )
         XCTAssertEqual(issues("id: 'a', name: '', \(launchd)"), ["jobs[0] (a).name: must not be empty"])
         XCTAssertEqual(issues("id: 'a', name: 5, \(launchd)"), ["jobs[0] (a).name: must be a string"])
     }
@@ -68,6 +72,7 @@ final class ConfigJobTests: XCTestCase {
 
     func testNotifyMustBeABoolean() {
         XCTAssertEqual(issues("id: 'a', \(launchd), notify: 'no'"), ["jobs[0] (a).notify: must be true or false"])
+        XCTAssertEqual(issues("id: 'a', \(launchd), notify: 1"), ["jobs[0] (a).notify: must be true or false"])
     }
 
     func testMisspelledSettingIsReported() {
@@ -102,22 +107,36 @@ final class ConfigJobTests: XCTestCase {
         XCTAssertEqual(issues("id: 'a', source: { launchd: 'x', cron: 'y' }"), [message])
     }
 
-    func testLaunchdLabelCannotContainSpacesOrLookLikeAnOption() {
-        let message = "jobs[0] (a).source.launchd: must be a launchd label, without spaces and not starting with \"-\""
+    func testLaunchdLabelMustBeOnePlainWord() {
+        let message = "jobs[0] (a).source.launchd: must be a launchd label: letters, digits, \".\", \"_\" and \"-\" only, and not starting with \"-\""
 
-        XCTAssertEqual(issues("id: 'a', source: { launchd: 'com example' }"), [message])
-        XCTAssertEqual(issues("id: 'a', source: { launchd: '-x' }"), [message])
+        for label in ["com example", "-x", "com.example;reboot", "$(id)", "a/b", "com.example\\n.a"] {
+            XCTAssertEqual(issues("id: 'a', source: { launchd: '\(label)' }"), [message], label)
+        }
     }
 
-    func testSystemdUnitMustBeATimerOrService() {
+    func testCronTextMustBeOneLine() {
+        let check = "checks: [ { type: 'file-age', path: '/tmp/x' } ]"
+
         XCTAssertEqual(
-            issues("id: 'a', host: 'box', source: { systemd: 'backup' }", hosts: box),
-            ["jobs[0] (a).source.systemd: must be a unit name ending in .timer or .service"]
+            issues("id: 'a', source: { cron: 'a\\nb' }, \(check)"),
+            ["jobs[0] (a).source.cron: must be a single line without control characters"]
         )
-        XCTAssertEqual(
-            issues("id: 'a', host: 'box', source: { systemd: '--now.timer' }", hosts: box),
-            ["jobs[0] (a).source.systemd: must be a unit name, without spaces and not starting with \"-\""]
-        )
+    }
+
+    func testSystemdUnitMustBeAPlainTimerOrServiceName() {
+        let message = "jobs[0] (a).source.systemd: must be a unit name such as \"backup.timer\": letters, digits, \".\", \"_\", \"-\", \"@\" and \":\" only, not starting with \"-\", and ending in .timer or .service"
+        let refused = [
+            "backup", "--now.timer", "my backup.timer", "x;reboot;$(id).service", "../../x.timer",
+            ".timer", "job@.service", "backup.mount", "bäckup.timer"
+        ]
+
+        for unit in refused {
+            XCTAssertEqual(issues("id: 'a', host: 'box', source: { systemd: '\(unit)' }", hosts: box), [message], unit)
+        }
+        for unit in ["backup.timer", "job@nightly.service", "dbus-org.example:1.timer"] {
+            XCTAssertEqual(issues("id: 'a', host: 'box', source: { systemd: '\(unit)' }", hosts: box), [], unit)
+        }
     }
 
     func testSystemdScopeMustBeSystemOrUser() {

@@ -65,6 +65,10 @@ extension ConfigParser {
             reader.report("run", "must be a list of strings: the program, then its arguments, such as [\"/usr/bin/true\"]")
             return nil
         }
+        guard program.hasPrefix("/") || program.hasPrefix("~/") else {
+            reader.report("run", "must start with the program's absolute path, such as \"/usr/bin/true\", because the search path differs between machines")
+            return nil
+        }
         return .command(arguments: arguments, timeout: timeout)
     }
 
@@ -74,8 +78,8 @@ extension ConfigParser {
         if !hasPath, !pathIsOptional {
             reader.report("path", "is required unless the job's source is launchd, whose log file is then used")
         }
-        let contains = reader.string("contains")
-        let notContains = reader.string("notContains")
+        let contains = reader.line("contains")
+        let notContains = reader.line("notContains")
         guard reader.has("contains") || reader.has("notContains") else {
             reader.reportSelf("needs contains or notContains")
             return nil
@@ -84,7 +88,11 @@ extension ConfigParser {
     }
 
     private func path(_ reader: inout ObjectReader, required: Bool) -> String? {
-        guard let path = required ? reader.requiredString("path") : reader.string("path") else { return nil }
+        if required, !reader.has("path") {
+            reader.report("path", "is required")
+            return nil
+        }
+        guard let path = reader.line("path") else { return nil }
         guard path.hasPrefix("/") || path.hasPrefix("~/") else {
             reader.report("path", "must be an absolute path, or start with ~/ for the home directory on the job's host")
             return nil

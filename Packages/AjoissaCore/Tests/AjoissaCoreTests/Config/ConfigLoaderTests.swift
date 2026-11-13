@@ -122,6 +122,51 @@ final class ConfigLoaderTests: XCTestCase {
         ])
     }
 
+    // MARK: - Settings written twice
+
+    func testSettingWrittenTwiceIsReportedWithItsLine() {
+        let issues = ConfigFixture.issues("""
+            {
+              version: 1,
+              jobs: [],
+              // a comment with "jobs" in it
+              jobs: [ { id: 'a', source: { launchd: 'com.example.a' } } ],
+            }
+            """)
+
+        XCTAssertEqual(issues, ["line 5: \"jobs\" is set twice in the same object, and only one of them would be used"])
+    }
+
+    func testQuotedAndUnquotedSpellingsOfASettingAreTheSameSetting() {
+        let issues = ConfigFixture.issues("""
+            { version: 1, jobs: [
+              { id: 'a', "id": 'b', 'id': 'c', source: { launchd: 'com.example.a' } }
+            ] }
+            """)
+
+        XCTAssertEqual(issues, [
+            "line 2: \"id\" is set twice in the same object, and only one of them would be used",
+            "line 2: \"id\" is set twice in the same object, and only one of them would be used"
+        ])
+    }
+
+    func testSameSettingInDifferentObjectsOrAsAValueIsNotADuplicate() throws {
+        let config = try ConfigFixture.load("""
+            {
+              version: 1,
+              hosts: [ { id: 'box', ssh: 'box' } ],
+              jobs: [
+                { id: 'a', name: 'id', source: { launchd: 'com.example.a' } },
+                /* id: 'x', */
+                { id: 'b', name: "a } ] 'quoted' \\" { id: 1, id: 2", source: { launchd: 'com.example.b' },
+                  checks: [ { type: 'command', run: ['/usr/bin/true', 'id', 'id'] }, { type: 'file-age', path: '/tmp/x' } ] },
+              ],
+            }
+            """)
+
+        XCTAssertEqual(config.jobs.map(\.id), ["a", "b"])
+    }
+
     // MARK: - Hosts
 
     func testHostIDIsRequired() {
@@ -131,8 +176,16 @@ final class ConfigLoaderTests: XCTestCase {
     func testHostIDMustBeAPlainIdentifier() {
         let message = "may only contain lower-case letters, digits, \".\", \"-\" and \"_\", and must start with a letter or digit"
 
-        XCTAssertEqual(hostIssues("id: 'Big Box', ssh: 'a'"), ["hosts[0] (Big Box).id: \(message)"])
-        XCTAssertEqual(hostIssues("id: '-box', ssh: 'a'"), ["hosts[0] (-box).id: \(message)"])
+        for id in ["Big Box", "-box", "box;reboot", "bäx", String(repeating: "a", count: 65)] {
+            XCTAssertEqual(hostIssues("id: '\(id)', ssh: 'a'"), ["hosts[0].id: \(message)"], id)
+        }
+    }
+
+    func testMalformedIDIsKeptOutOfTheLocation() {
+        let issues = hostIssues("id: 'two\\nlines', ssh: 'a'")
+
+        XCTAssertEqual(issues.count, 1)
+        XCTAssertTrue(issues[0].hasPrefix("hosts[0].id: "), issues[0])
     }
 
     func testLocalHostCannotBeRedefined() {
@@ -153,11 +206,20 @@ final class ConfigLoaderTests: XCTestCase {
         XCTAssertEqual(hostIssues("id: 'a'"), ["hosts[0] (a).ssh: is required"])
     }
 
-    func testSSHAliasCannotLookLikeAnOptionOrContainSpaces() {
-        let message = "hosts[0] (a).ssh: must be a host alias from ~/.ssh/config, without spaces and not starting with \"-\""
+    func testSSHAliasMustBeOnePlainWord() {
+        let message = "hosts[0] (a).ssh: must be a host alias from ~/.ssh/config: letters, digits, \".\", \"_\" and \"-\" only, and not starting with \"-\""
 
-        XCTAssertEqual(hostIssues("id: 'a', ssh: '-oProxyCommand=evil'"), [message])
-        XCTAssertEqual(hostIssues("id: 'a', ssh: 'my box'"), [message])
+        for alias in ["-oProxyCommand=evil", "my box", "box;reboot", "$(id)", "user@box", "box\\ttab", "bäx"] {
+            XCTAssertEqual(hostIssues("id: 'a', ssh: '\(alias)'"), [message], alias)
+        }
+        XCTAssertEqual(hostIssues("id: 'a', ssh: 'Studio-Mac_2.local'"), [])
+    }
+
+    func testDuplicateHostIsReportedEvenWhenTheFirstOneIsBroken() {
+        let issues = ConfigFixture.issues("{ version: 1, hosts: [ { id: 't', ssh: '-bad' }, { id: 't', ssh: 'ok' } ], jobs: [] }")
+
+        XCTAssertEqual(issues.count, 2)
+        XCTAssertEqual(issues.last, "hosts[1] (t).id: is used more than once")
     }
 
     func testMayBeOfflineMustBeABoolean() {

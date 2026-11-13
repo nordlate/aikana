@@ -21,7 +21,7 @@ cd Packages/AjoissaCore
 swift run ajoissa validate --config ~/.config/ajoissa/config.json5
 ```
 
-`validate` lists every problem at once, each with where it is, and exits with 0 for a usable file, 1 for a file that breaks a rule and 66 for a file it cannot read. Settings it does not know are reported as errors, so a misspelled setting is not silently ignored.
+`validate` lists every problem at once, each with where it is, and exits with 0 for a usable file, 1 for a file that breaks a rule and 66 for a file it cannot read. Settings it does not know, and settings written twice in the same object, are reported as errors, so a misspelled or repeated setting is not silently ignored.
 
 ## Layout
 

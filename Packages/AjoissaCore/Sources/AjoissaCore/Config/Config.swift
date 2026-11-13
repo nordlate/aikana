@@ -2,7 +2,7 @@ import Foundation
 
 /// What the user expects to run: the machines, and the jobs on them.
 ///
-/// A `Config` only exists in validated form. Build one with ``ConfigLoader``.
+/// There is no public initializer: outside the engine, a config comes from ``ConfigLoader`` and has passed every rule.
 public struct Config: Sendable, Equatable {
     /// The only config file format version this engine reads.
     public static let supportedVersion = 1
@@ -10,12 +10,6 @@ public struct Config: Sendable, Equatable {
     /// Every host a job can run on. Always starts with ``Host/local``.
     public let hosts: [Host]
     public let jobs: [Job]
-
-    /// Not public: outside the engine, a config comes from ``ConfigLoader`` and has passed every rule.
-    init(hosts: [Host], jobs: [Job]) {
-        self.hosts = hosts
-        self.jobs = jobs
-    }
 
     public func host(withID id: String) -> Host? {
         hosts.first { $0.id == id }
@@ -97,7 +91,7 @@ public enum JobSource: Sendable, Equatable {
     case launchd(label: String)
     /// A systemd timer or the service it starts, by unit name.
     case systemd(unit: String, scope: SystemdScope)
-    /// A crontab line, identified by text that appears in exactly one line.
+    /// A crontab line, identified by text that appears in exactly one line. The text is only compared, never run.
     case cron(matching: String)
 }
 
@@ -140,7 +134,8 @@ public enum Check: Sendable, Equatable {
     case fileAge(path: String, maxAge: TimeInterval?)
     /// The newest file matching `path` is at least `minBytes` large.
     case fileSize(path: String, minBytes: Int64)
-    /// The command exits with code 0 within `timeout`. Arguments are passed as given, without a shell.
+    /// The command exits with code 0 within `timeout`. The first argument is the program, as an absolute or `~/` path.
+    /// Arguments are passed as given, without a shell.
     case command(arguments: [String], timeout: TimeInterval)
     /// A log file contains, or does not contain, some text since the job's last expected run.
     /// `path` is `nil` when the log path comes from the job's launchd definition.

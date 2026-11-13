@@ -66,6 +66,20 @@ struct ObjectReader {
         return text
     }
 
+    /// A string that is one line of ordinary text: no line breaks, tabs or other control characters.
+    mutating func line(_ key: String) -> String? {
+        guard let text = string(key) else { return nil }
+        guard !Self.hasControlCharacters(text) else {
+            report(key, "must be a single line without control characters")
+            return nil
+        }
+        return text
+    }
+
+    static func hasControlCharacters(_ text: String) -> Bool {
+        text.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains)
+    }
+
     mutating func requiredString(_ key: String) -> String? {
         guard has(key) else {
             report(key, "is required")
@@ -140,7 +154,9 @@ struct ObjectReader {
                 issues.add(position, "must be an object")
                 return nil
             }
-            let label = (nested["id"] as? String).map { "\(position) (\($0))" }
+            // Only a well-formed id goes into the location; anything else could garble the message.
+            let id = (nested["id"] as? String).flatMap { ConfigParser.isIdentifier($0) ? $0 : nil }
+            let label = id.map { "\(position) (\($0))" }
             return Self(path: label ?? position, values: nested, issues: issues)
         }
     }
