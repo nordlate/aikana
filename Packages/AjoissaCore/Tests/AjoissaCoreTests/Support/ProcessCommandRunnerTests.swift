@@ -16,6 +16,20 @@ final class ProcessCommandRunnerTests: XCTestCase {
         XCTAssertEqual(result, CommandResult(exitCode: 7, output: "", errorOutput: "problem\n"))
     }
 
+    /// A program ended by a signal gets the exit code a shell would report: 128 plus the signal's number.
+    func testProgramEndedByASignal() throws {
+        let result = try runner.run("/bin/sh", arguments: ["-c", "kill -9 $$"], timeout: 10)
+
+        XCTAssertEqual(result.exitCode, 137)
+    }
+
+    func testOutputThatIsNotValidTextKeepsWhatIsReadable() throws {
+        let result = try runner.run("/usr/bin/printf", arguments: ["ok \\377 hylätty"], timeout: 10)
+
+        XCTAssertTrue(result.output.hasPrefix("ok "), result.output)
+        XCTAssertTrue(result.output.hasSuffix(" hylätty"), result.output)
+    }
+
     func testArgumentsAreNotReadByAShell() throws {
         let result = try runner.run("/bin/echo", arguments: ["$HOME; echo injected", "`id`"], timeout: 10)
 

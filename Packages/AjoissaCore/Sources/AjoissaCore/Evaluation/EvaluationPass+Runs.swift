@@ -15,6 +15,11 @@ extension EvaluationPass {
                 let restarted = evidence.bootedAt.map { $0 > earlierDate } ?? false
                 let started = restarted || count < earlierCount ? count : count - earlierCount
                 if started > 0 {
+                    if !timetable.calendarRules.isEmpty, openRun(timetable) == nil {
+                        // No scheduled time was waiting for a run, so this one is extra: started by hand, say,
+                        // after the scheduled run failed. It started some time after the last look.
+                        record.extraRunSeenAt = earlierDate
+                    }
                     latest = Self.later(latest, creditedRun(started: started, since: earlierDate, timetable: timetable))
                 }
             }

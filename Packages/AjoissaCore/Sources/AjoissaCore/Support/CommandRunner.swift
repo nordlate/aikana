@@ -74,8 +74,10 @@ public struct ProcessCommandRunner: CommandRunner {
         let deadline = DispatchTime.now() + Self.patience
         collectedOutput.waitForEnd(until: deadline)
         collectedErrorOutput.waitForEnd(until: deadline)
+        // A program ended by a signal has no exit code of its own. It gets the one a shell would report.
+        let endedBySignal = process.terminationReason == .uncaughtSignal
         return CommandResult(
-            exitCode: process.terminationStatus,
+            exitCode: endedBySignal ? 128 + process.terminationStatus : process.terminationStatus,
             output: collectedOutput.text,
             errorOutput: collectedErrorOutput.text
         )
@@ -112,7 +114,9 @@ public struct ProcessCommandRunner: CommandRunner {
 
         var text: String {
             let data = lock.withLock { self.data }
-            return String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1) ?? ""
+            // Bytes that are not valid text become replacement characters; the rest stays readable.
+            // swiftlint:disable:next optional_data_string_conversion
+            return String(decoding: data, as: UTF8.self)
         }
     }
 }

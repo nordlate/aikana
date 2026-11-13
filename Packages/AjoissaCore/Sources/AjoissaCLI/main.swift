@@ -71,6 +71,59 @@ func validate(_ arguments: [String]) throws(Stop) {
     print("\(url.path): OK, \(config.jobs.count) jobs on \(config.hosts.count) hosts")
 }
 
+/// What `status` needs to look at the jobs on this Mac.
+struct LocalLook {
+    let collector: LaunchdCollector
+    let host: LocalHost
+    let awakeSince = SystemUptime.awakeSince()
+    let bootedAt = SystemUptime.bootedAt()
+
+    init(home: URL) {
+        let runner = ProcessCommandRunner()
+        collector = LaunchdCollector(runner: runner, locations: LaunchdSearchLocation.standard(homeDirectory: home, userID: getuid()))
+        host = LocalHost(homeDirectory: home, runner: runner)
+    }
+
+    /// Looks at one job, prints what was found and returns the record to keep. `nil` for a job that cannot be
+    /// looked at yet.
+    func assess(_ job: Job, previous: JobRecord?) -> JobRecord? {
+        guard job.hostID == Host.localID else {
+            print("  verdict:  not judged yet: only jobs on this Mac are supported so far")
+            return nil
+        }
+        var evidence = Evidence(awakeSince: awakeSince, bootedAt: bootedAt)
+        var logPaths: [String] = []
+        switch job.source {
+        case let .launchd(label):
+            let observation = collector.observe(label: label)
+            logPaths = observation.logPaths
+            evidence.source = SourceEvidence(launchd: observation, logModified: FileTimes.latestModification(of: logPaths))
+            print("  launchd:  \(label)")
+            print("  schedule: \(observation.scheduleDescription)")
+            print("  state:    \(observation.statusDescription)")
+        case .systemd, .cron:
+            print("  verdict:  not judged yet: of the schedulers, only launchd is read so far")
+            return nil
+        case nil:
+            break
+        }
+        let assessment = JobAssessor.assess(
+            job: job,
+            evidence: evidence,
+            host: host,
+            defaultLogPaths: logPaths,
+            previous: previous,
+            now: Date(),
+            calendar: .current
+        )
+        for (check, outcome) in zip(job.checks, assessment.outcomes) {
+            print("  check:    \(check.label): \(outcome.summary)")
+        }
+        print("  verdict:  \(assessment.evaluation.state.rawValue): \(assessment.evaluation.reason)")
+        return assessment.evaluation.record
+    }
+}
+
 func status(_ arguments: [String]) throws(Stop) {
     let (_, config) = try loadConfig("status", arguments)
     let home = FileManager.default.homeDirectoryForCurrentUser
@@ -81,39 +134,13 @@ func status(_ arguments: [String]) throws(Stop) {
     } catch {
         throw historyProblem(error)
     }
-    let collector = LaunchdCollector(
-        runner: ProcessCommandRunner(),
-        locations: LaunchdSearchLocation.standard(homeDirectory: home, userID: getuid())
-    )
-    let awakeSince = SystemUptime.awakeSince()
-    let bootedAt = SystemUptime.bootedAt()
-
+    let look = LocalLook(home: home)
     for job in config.jobs {
         print(job.name == job.id ? job.id : "\(job.id) (\(job.name))")
-        guard case let .launchd(label) = job.source, job.hostID == Host.localID else {
-            print("  verdict:  not judged yet: only launchd jobs on this Mac are supported so far")
-            continue
+        if let record = look.assess(job, previous: history.jobs[job.id]) {
+            history.jobs[job.id] = record
         }
-        let observation = collector.observe(label: label)
-        let evidence = Evidence(
-            source: SourceEvidence(launchd: observation, logModified: FileTimes.latestModification(of: observation.logPaths)),
-            awakeSince: awakeSince,
-            bootedAt: bootedAt
-        )
-        let evaluation = JobEvaluator.evaluate(
-            job: job,
-            evidence: evidence,
-            previous: history.jobs[job.id],
-            now: Date(),
-            calendar: .current
-        )
-        history.jobs[job.id] = evaluation.record
-        print("  launchd:  \(label)")
-        print("  schedule: \(observation.scheduleDescription)")
-        print("  state:    \(observation.statusDescription)")
-        print("  verdict:  \(evaluation.state.rawValue): \(evaluation.reason)")
     }
-
     history.keepOnly(jobIDs: config.jobs.map(\.id))
     do {
         try historyFile.save(history)

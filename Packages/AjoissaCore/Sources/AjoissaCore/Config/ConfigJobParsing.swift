@@ -31,7 +31,7 @@ extension ConfigParser {
         // A source that was given but is wrong has already been reported; do not also complain about a log path.
         let sourceIsUnknown = reader.has("source") && source == nil
         let checks = checks(&reader, logPathAvailable: source?.providesLogPath ?? sourceIsUnknown)
-        crossRules(reader, hostID: hostID, source: source)
+        crossRules(reader, hostID: hostID, source: source, schedule: schedule, checks: checks)
         guard let id, let hostID else { return nil }
         return Job(
             id: id,
@@ -46,13 +46,16 @@ extension ConfigParser {
     }
 
     /// Rules that span more than one setting of a job.
-    private func crossRules(_ reader: ObjectReader, hostID: String?, source: JobSource?) {
+    private func crossRules(_ reader: ObjectReader, hostID: String?, source: JobSource?, schedule: Schedule?, checks: [Check]) {
         if !reader.has("source") {
             if !reader.has("schedule") {
                 reader.report("schedule", "is required for a job without a source, because there is nowhere to read the schedule from")
             }
             if reader.count(of: "checks") == 0 {
                 reader.reportSelf("needs a source or at least one check; otherwise there is no way to tell whether it ran")
+            }
+            if case .every = schedule, checks.contains(where: \.readsLog) {
+                reader.report("checks", "cannot include log-pattern for a job with no source and an \"every\" schedule: nothing tells one run's log lines from the next; give the job daily or weekly times, or a source")
             }
         }
         if case .systemd = source, hostID == Host.localID {
@@ -168,6 +171,12 @@ extension ConfigParser {
         }
         let stem = unit.dropLast(suffix.count)
         return !stem.isEmpty && !stem.hasSuffix("@")
+    }
+}
+
+private extension Check {
+    var readsLog: Bool {
+        if case .logPattern = self { true } else { false }
     }
 }
 
