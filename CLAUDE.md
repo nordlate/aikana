@@ -19,6 +19,7 @@ xcodebuild test -scheme Ajoissa -destination 'platform=macOS,arch=arm64' -only-t
 # Engine only, without the Xcode project (fastest loop for AjoissaCore work)
 cd Packages/AjoissaCore && swift test
 cd Packages/AjoissaCore && swift run ajoissa --version
+cd Packages/AjoissaCore && swift run ajoissa validate --config Examples/config.example.json5
 
 # Lint
 swiftlint lint
@@ -56,6 +57,8 @@ The Xcode project uses `PBXFileSystemSynchronizedRootGroup`: new files under `Aj
 - **Remote commands** (once SSH support exists) must be read-only, built without string concatenation into a shell, and listed in one place in the code and in the README.
 - **Time is injected.** Schedule and evaluation logic takes the current time and its evidence as parameters; no `Date()` and no I/O inside it.
 - **Not sandboxed, hardened runtime on.** Do not enable the App Sandbox.
+- **The config is validated in one place.** `ConfigLoader` is the only way to get a `Config`, and it reports every problem with a path and a message written for a person. A new setting needs: the model, the parser, a test per rule with the exact message, and an entry in `Packages/AjoissaCore/Examples/config.example.json5`. Unknown settings are errors.
+- **Values that reach another program must stay one harmless word.** Host aliases, launchd labels and unit names may only contain letters, digits and a few listed punctuation characters, and may not start with `-`: they end up as arguments to `launchctl` and `ssh`, and ssh hands its command to a remote shell. Free text (paths, patterns, cron text) must be a single line. Do not loosen these without a test that shows the value is quoted safely where it is used.
 - **Tests are XCTest.** The command line target is named `AjoissaCLI` so its module does not collide with the app module `Ajoissa` on a case-insensitive disk.
 
 ## Tasks
