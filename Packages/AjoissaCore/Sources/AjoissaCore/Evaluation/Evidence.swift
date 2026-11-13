@@ -76,10 +76,13 @@ public struct CheckOutcome: Sendable, Equatable {
     /// Whether passing shows that the job ran since its last expected time: a file newer than that time does,
     /// a command that merely succeeds does not.
     public var provesRun: Bool
+    /// More to show a person who asks: the file that was found, or what a command printed.
+    public var detail: String?
 
-    public init(result: Result, provesRun: Bool = false) {
+    public init(result: Result, provesRun: Bool = false, detail: String? = nil) {
         self.result = result
         self.provesRun = provesRun
+        self.detail = detail
     }
 }
 

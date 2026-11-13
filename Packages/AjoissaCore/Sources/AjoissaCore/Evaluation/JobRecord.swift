@@ -71,6 +71,8 @@ public struct JobRecord: Sendable, Equatable, Codable {
     /// The state the job was in before its state became unreadable or its host went offline. Coming back to the
     /// same state is not news.
     public var stateBeforeUnreadable: JobState?
+    /// What the job's checks remember. The evaluation carries it along and never reads it.
+    public var checkState: CheckState?
     public var state: JobState
     public var reason: String
     public var stateSince: Date
@@ -91,6 +93,7 @@ public struct JobRecord: Sendable, Equatable, Codable {
         openRunGraceFrom: Date? = nil,
         intervalFrom: Date? = nil,
         stateBeforeUnreadable: JobState? = nil,
+        checkState: CheckState? = nil,
         state: JobState = .waiting,
         reason: String = "",
         stateSince: Date? = nil,
@@ -108,6 +111,7 @@ public struct JobRecord: Sendable, Equatable, Codable {
         self.openRunGraceFrom = openRunGraceFrom
         self.intervalFrom = intervalFrom
         self.stateBeforeUnreadable = stateBeforeUnreadable
+        self.checkState = checkState
         self.state = state
         self.reason = reason
         self.stateSince = stateSince ?? watchingSince
@@ -125,6 +129,10 @@ public struct JobEvaluation: Sendable, Equatable {
     /// for, or else the latest one that has passed. Checks that ask "since the last expected run" mean this.
     public var expectedRun: Date?
     public var nextRun: Date?
+    /// The moment "since the last expected run" means for this job's checks: the scheduled time in question,
+    /// or for a job on an interval the start of the stretch in which a run must have happened. `nil` for a
+    /// job with no run to expect.
+    public var checksSince: Date?
     /// Whether the state is news: it differs from the one in the record that was passed in. True for a job seen
     /// for the first time. A job that comes back from being unreadable or offline to the state it had before
     /// has not changed.

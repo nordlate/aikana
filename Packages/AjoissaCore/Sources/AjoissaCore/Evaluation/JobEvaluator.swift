@@ -43,6 +43,8 @@ struct EvaluationPass {
     /// The scheduled time the verdict is about, and the one after now. Set once they are known.
     var expectedRun: Date?
     var nextRun: Date?
+    /// For a job on an interval, the start of the stretch in which a run must have happened.
+    var intervalWindowStart: Date?
 
     init(job: Job, evidence: Evidence, previous: JobRecord?, now: Date, calendar: Calendar) {
         self.job = job
@@ -127,7 +129,9 @@ struct EvaluationPass {
             nextRun = timetable.nextCalendarOccurrence(after: now, calendar: calendar)
             deadline = max(due, awakeSince).addingTimeInterval(job.grace)
         } else {
-            deadline = max(record.watchingSince, awakeSince).addingTimeInterval((timetable.interval ?? 0) + job.grace)
+            let window = (timetable.interval ?? 0) + job.grace
+            intervalWindowStart = now.addingTimeInterval(-window)
+            deadline = max(record.watchingSince, awakeSince).addingTimeInterval(window)
         }
         if now <= deadline, !evidence.checks.allSatisfy({ $0.result == .passed }) {
             let run = expectedRun.map { "the run due at \(stamp($0))" } ?? "the next run"
@@ -214,6 +218,14 @@ struct EvaluationPass {
         record.state = state
         record.reason = reason
         record.lastEvaluatedAt = now
-        return JobEvaluation(state: state, reason: reason, expectedRun: expectedRun, nextRun: nextRun, changed: changed, record: record)
+        return JobEvaluation(
+            state: state,
+            reason: reason,
+            expectedRun: expectedRun,
+            nextRun: nextRun,
+            checksSince: expectedRun ?? intervalWindowStart,
+            changed: changed,
+            record: record
+        )
     }
 }

@@ -8,7 +8,7 @@ Ajoissa watches scheduled jobs (launchd on Macs, systemd timers and cron on Linu
 
 ## Status
 
-Early. For launchd jobs on this Mac, `ajoissa status` now gives a verdict on each job: whether the run that was last due happened, failed or is missing. Outcome checks are described in the config but not run yet, jobs on other machines are not read, and the app shows an empty menu bar panel. The plan is in the issues, in three milestones: one Mac, other machines, release.
+Early. For jobs on this Mac, `ajoissa status` gives a verdict on each job: whether the run that was last due happened, failed or is missing, and whether it left behind what its checks ask for. Jobs on other machines are not read yet, and the app shows an empty menu bar panel. The plan is in the issues, in three milestones: one Mac, other machines, release.
 
 ## Config
 
@@ -29,7 +29,10 @@ Ajoissa only reads. On this Mac it runs one command and reads one kind of file:
 
 - `/bin/launchctl print gui/<your user id>/<label>` or `/bin/launchctl print system/<label>`, for each launchd job in your config. The label is refused unless it is one plain word.
 - The plist files in `~/Library/LaunchAgents`, `/Library/LaunchAgents` and `/Library/LaunchDaemons`, to find each job's timetable and log paths, and the plist launchd says a job was loaded from.
-- The modification time of each job's log files (never their contents), and when this Mac last woke or started.
+- The modification time of each job's log files, and when this Mac last woke or started.
+- For the checks you configure: the names, sizes and modification times of the files a `file-age` or `file-size` path matches (never their contents), and the part of a log a `log-pattern` check asks about.
+
+Beyond that it runs only what you tell it to: the program of each `command` check, with the arguments as written and without a shell.
 
 ```sh
 cd Packages/AjoissaCore
@@ -61,6 +64,24 @@ Things worth knowing:
 - **A run in progress counts.** launchd does not start a job that is still running, so a long run accounts for a scheduled time it runs through.
 - **Nothing is judged in hindsight.** A run that was due before Ajoissa first saw the job, or before its timetable changed, is not called missed. Evidence that it did happen is still believed.
 - **History** is kept in `~/Library/Application Support/Ajoissa/history.json` (or the file `AJOISSA_HISTORY` names). launchd keeps no history of its own, so this file is what makes "the run count went up since last time" possible. A history file that cannot be read stops Ajoissa instead of being replaced.
+
+### Checks
+
+A job can exit with code 0 and still have produced nothing. Checks say what a successful run leaves behind.
+
+| Check | Passes when |
+| --- | --- |
+| `file-age` | A file matching `path` is newer than the run's scheduled time, or newer than `maxAge` if that is given. |
+| `file-size` | The newest file matching `path` is at least `minSize`. |
+| `command` | The program in `run` exits with code 0 within `timeout`. |
+| `log-pattern` | What the run wrote to the log contains `contains` and does not contain `notContains`. |
+
+- **Three results.** A check passes, fails, or could not be carried out (a folder without permission, a command that hangs). The last makes the job `unknown`, never `failed`.
+- **A check can prove a run.** A file newer than the scheduled time, or a wanted line in the log, shows the job ran even when the run itself was not seen.
+- **A failing check does not fail a job whose run still has time.** Yesterday's report is expected to be old at 02:01.
+- **Only what the run wrote.** A log only grows. Ajoissa notes how long each log is every time it looks, and reads from where the log stood before the run. A log it first sees after the run has already written to it is let through once and read properly from the next run on.
+- **Paths** may contain `*`, `?` and `[...]`, and `~/` for the home directory. `**` is not supported.
+- **Checks are skipped** while the job is running, and when the job cannot be looked at or cannot run.
 
 ### Limits
 

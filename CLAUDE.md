@@ -44,6 +44,7 @@ AjoissaTests/             XCTest, hosted in the app
 Packages/AjoissaCore/     The engine
   Sources/AjoissaCore/    Config/ (model, validating loader), Launchd/ (plist reader, launchctl parser, collector),
                           Evaluation/ (Timetable, Evidence, JobEvaluator, JobRecord, History),
+                          Checks/ (HostAccess, LocalHost, CheckRunner, CheckState, JobAssessor),
                           Support/ (CommandRunner). Later: systemd and cron collectors, checks
   Sources/AjoissaCLI/     `ajoissa` command line tool (product name `ajoissa`)
   Tests/AjoissaCoreTests/ XCTest
@@ -60,6 +61,8 @@ The Xcode project uses `PBXFileSystemSynchronizedRootGroup`: new files under `Aj
 - **Remote commands** (once SSH support exists) must be read-only, built without string concatenation into a shell, and listed in one place in the code and in the README.
 - **Time is injected.** Schedule and evaluation logic takes the current time and its evidence as parameters; no `Date()` and no I/O inside it.
 - **`JobEvaluator` decides every alert.** It is a pure function of the job, the evidence, the previous record, the time and the calendar. Any change to it needs a scenario test in `Tests/AjoissaCoreTests/Evaluation/` written as a timeline (`Scenario`), and must keep these properties: the verdict is about the oldest scheduled time no run accounts for, so a stopped job turns `missed` once and stays `missed` (no flapping, however often it is scheduled); an absent run is `missed` only after its deadline and only if it was due while the job was loaded and being watched; scheduled times slept through count as one; the moment a grace period counts from is settled when a scheduled time is first found open, so a later wake never turns `missed` back into `waiting`; a run in progress is a run; unreadable state or an unreadable timetable is `unknown`, never `ok`, `missed` or `failed`; evidence from the future is ignored; a failing check does not fail a job whose run still has time. The known limits are listed in the README under "Limits"; update that list when one is closed or a new one is found.
+- **Checks reach the job's machine only through `HostAccess`.** `CheckRunner` never touches `FileManager` or `Process`; `LocalHost` does it for this Mac and an SSH host will do it for others, so a check behaves the same everywhere. A check has three results, and "could not be carried out" is never reported as failed. Every check type needs tests for pass, fail and could-not-run, with the exact message.
+- **`JobAssessor.assess` is the one way to look at a job.** It evaluates, runs the checks against the run the evaluation expects, and evaluates again. Callers (the CLI, later the app) do not call `CheckRunner` or `JobEvaluator` themselves.
 - **Collectors gather, the evaluator judges.** A collector turns what it read into `Evidence` and never decides a `JobState` itself.
 - **Not sandboxed, hardened runtime on.** Do not enable the App Sandbox.
 - **The config is validated in one place.** `ConfigLoader` is the only way to get a `Config`, and it reports every problem with a path and a message written for a person. A new setting needs: the model, the parser, a test per rule with the exact message, and an entry in `Packages/AjoissaCore/Examples/config.example.json5`. Unknown settings are errors.

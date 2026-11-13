@@ -81,6 +81,8 @@ extension EvaluationPass {
     // MARK: - Interval
 
     mutating func decideByInterval(_ interval: TimeInterval) -> JobEvaluation {
+        // A file or log line newer than this shows a run within the stretch that must have had one.
+        intervalWindowStart = now.addingTimeInterval(-interval - job.grace)
         if evidence.checks.contains(where: { $0.provesRun && $0.result == .passed }) {
             record.lastRun = now
         }
