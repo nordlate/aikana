@@ -20,6 +20,7 @@ xcodebuild test -scheme Ajoissa -destination 'platform=macOS,arch=arm64' -only-t
 cd Packages/AjoissaCore && swift test
 cd Packages/AjoissaCore && swift run ajoissa --version
 cd Packages/AjoissaCore && swift run ajoissa validate --config Examples/config.example.json5
+cd Packages/AjoissaCore && swift run ajoissa status --config Examples/config.example.json5
 
 # Lint
 swiftlint lint
@@ -41,7 +42,8 @@ Ajoissa/                  The app: MenuBarExtra, SwiftUI views, notifications. N
   Features/               SwiftUI views and their view models, by feature
 AjoissaTests/             XCTest, hosted in the app
 Packages/AjoissaCore/     The engine
-  Sources/AjoissaCore/    Config model, collectors (launchd, systemd, cron), run evaluation, checks
+  Sources/AjoissaCore/    Config/ (model, validating loader), Launchd/ (plist reader, launchctl parser, collector),
+                          Support/ (CommandRunner). Later: systemd and cron collectors, run evaluation, checks
   Sources/AjoissaCLI/     `ajoissa` command line tool (product name `ajoissa`)
   Tests/AjoissaCoreTests/ XCTest
 ```
@@ -59,6 +61,10 @@ The Xcode project uses `PBXFileSystemSynchronizedRootGroup`: new files under `Aj
 - **Not sandboxed, hardened runtime on.** Do not enable the App Sandbox.
 - **The config is validated in one place.** `ConfigLoader` is the only way to get a `Config`, and it reports every problem with a path and a message written for a person. A new setting needs: the model, the parser, a test per rule with the exact message, and an entry in `Packages/AjoissaCore/Examples/config.example.json5`. Unknown settings are errors.
 - **Values that reach another program must stay one harmless word.** Host aliases, launchd labels and unit names may only contain letters, digits and a few listed punctuation characters, and may not start with `-`: they end up as arguments to `launchctl` and `ssh`, and ssh hands its command to a remote shell. Free text (paths, patterns, cron text) must be a single line. Do not loosen these without a test that shows the value is quoted safely where it is used.
+- **Other programs are reached only through `CommandRunner`.** Never call `Process` elsewhere. Arguments are a list, never a shell string, and every command has a timeout. Tests use `FakeCommandRunner`.
+- **Every command Ajoissa runs is listed in the README** ("What Ajoissa runs and reads"). Add to that list in the same change that adds a command.
+- **`launchctl print` output is not a stable format.** `LaunchctlPrintParser` takes what it recognises and leaves the rest `nil`; it must never fail on an unknown line. When the format changes, capture real output from a throwaway `com.example.*` job, strip everything personal, add it under `Tests/AjoissaCoreTests/Launchd/Fixtures/` and update the parser.
+- **"Could not be read" is not "is broken".** A collector reports `unknown` with a reason when it cannot tell; it never guesses a job's state.
 - **Tests are XCTest.** The command line target is named `AjoissaCLI` so its module does not collide with the app module `Ajoissa` on a case-insensitive disk.
 
 ## Tasks

@@ -8,7 +8,7 @@ Ajoissa watches scheduled jobs (launchd on Macs, systemd timers and cron on Linu
 
 ## Status
 
-Early. The config file format and its validation exist, with `ajoissa validate` to check a file. Nothing reads jobs yet: the app shows an empty menu bar panel. The plan is in the issues, in three milestones: one Mac, other machines, release.
+Early. The config file format and its validation exist, and launchd jobs on this Mac can be read: `ajoissa status` shows each one's timetable and what launchd knows about it. Nothing judges yet whether a job ran when it should have, and the app shows an empty menu bar panel. The plan is in the issues, in three milestones: one Mac, other machines, release.
 
 ## Config
 
@@ -22,6 +22,18 @@ swift run ajoissa validate --config ~/.config/ajoissa/config.json5
 ```
 
 `validate` lists every problem at once, each with where it is, and exits with 0 for a usable file, 1 for a file that breaks a rule and 66 for a file it cannot read. Settings it does not know, and settings written twice in the same object, are reported as errors, so a misspelled or repeated setting is not silently ignored.
+
+## What Ajoissa runs and reads
+
+Ajoissa only reads. On this Mac it runs one command and reads one kind of file:
+
+- `/bin/launchctl print gui/<your user id>/<label>` or `/bin/launchctl print system/<label>`, for each launchd job in your config. The label is refused unless it is one plain word.
+- The plist files in `~/Library/LaunchAgents`, `/Library/LaunchAgents` and `/Library/LaunchDaemons`, to find each job's timetable and log paths, and the plist launchd says a job was loaded from.
+
+```sh
+cd Packages/AjoissaCore
+swift run ajoissa status --config ~/.config/ajoissa/config.json5
+```
 
 ## Layout
 

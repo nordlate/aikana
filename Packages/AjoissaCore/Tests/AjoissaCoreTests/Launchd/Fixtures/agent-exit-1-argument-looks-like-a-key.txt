@@ -1,0 +1,86 @@
+gui/501/com.example.tricky = {
+	active count = 0
+	path = /Users/example/Library/LaunchAgents/com.example.tricky.plist
+	type = LaunchAgent
+	state = not running
+
+	program = /bin/sleep
+	arguments = {
+		/bin/sleep
+		20
+		state = not running
+	}
+
+	stdout path = /tmp/com.example.tricky.log
+	stderr path = /tmp/com.example.tricky.err
+	inherited environment = {
+		SSH_AUTH_SOCK => /var/run/com.apple.launchd.EXAMPLE/Listeners
+	}
+
+	default environment = {
+		PATH => /usr/bin:/bin:/usr/sbin:/sbin
+	}
+
+	environment = {
+		OSLogRateLimit => 64
+		XPC_SERVICE_NAME => com.example.tricky
+	}
+
+	domain = gui/501 [100014]
+	asid = 100014
+	minimum runtime = 10
+	exit timeout = 5
+	runs = 1
+	last exit code = 1
+
+	event triggers = {
+		com.example.tricky.268435480 => {
+			keepalive = 0
+			service = com.example.tricky
+			stream = com.apple.launchd.calendarinterval
+			monitor = com.apple.UserEventAgent-Aqua
+			descriptor = {
+				"Minute" => 0
+				"Hour" => 2
+			}
+		}
+	}
+
+	event channels = {
+		"com.apple.launchd.calendarinterval" = {
+			port = 0x158087
+			active = 0
+			managed = 1
+			reset = 0
+			hide = 0
+			watching = 1
+		}
+	}
+
+	resource coalition = {
+		ID = 33398
+		type = resource
+		state = active
+		active count = 1
+		name = com.example.tricky
+	}
+
+	jetsam coalition = {
+		ID = 33399
+		type = jetsam
+		state = active
+		active count = 1
+		name = com.example.tricky
+	}
+
+	spawn type = daemon (3)
+	jetsam priority = 40
+	jetsam memory limit (active) = (unlimited)
+	jetsam memory limit (inactive) = (unlimited)
+	jetsamproperties category = daemon
+	jetsam thread limit = 32
+	cpumon = default
+	sanitizer flags = 0x0
+
+	properties = inferred program
+}

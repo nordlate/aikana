@@ -4,6 +4,7 @@ import Foundation
 let usage = """
     Usage:
       ajoissa validate [--config <path>]   Check the config file and report every problem in it
+      ajoissa status [--config <path>]     Show what is known about each job right now
       ajoissa --version
       ajoissa --help
 
@@ -19,17 +20,23 @@ enum ExitCode: Int32 {
     case unreadableConfig = 66
 }
 
+/// Why a command stopped before doing its work.
+struct Stop: Error {
+    let code: ExitCode
+}
+
 func printError(_ message: String) {
     FileHandle.standardError.write(Data((message + "\n").utf8))
 }
 
-func usageError(_ message: String) -> ExitCode {
+func usageError(_ message: String) -> Stop {
     printError("ajoissa: \(message)")
     printError(usage)
-    return .usage
+    return Stop(code: .usage)
 }
 
-func validate(_ arguments: [String]) -> ExitCode {
+/// Loads the config a command was asked to use, reporting what is wrong with it if it cannot be used.
+func loadConfig(_ command: String, _ arguments: [String]) throws(Stop) -> (url: URL, config: Config) {
     var explicitPath: String?
     switch arguments.count {
     case 0:
@@ -37,7 +44,7 @@ func validate(_ arguments: [String]) -> ExitCode {
     case 2 where arguments[0] == "--config":
         explicitPath = arguments[1]
     default:
-        return usageError("validate takes only --config <path>")
+        throw usageError("\(command) takes only --config <path>")
     }
     let url = ConfigLocation.resolve(
         explicitPath: explicitPath,
@@ -45,32 +52,65 @@ func validate(_ arguments: [String]) -> ExitCode {
         homeDirectory: FileManager.default.homeDirectoryForCurrentUser
     )
     do {
-        let config = try ConfigLoader.load(contentsOf: url)
-        print("\(url.path): OK, \(config.jobs.count) jobs on \(config.hosts.count) hosts")
-        return .success
+        return (url, try ConfigLoader.load(contentsOf: url))
     } catch {
         printError("\(url.path): not usable")
         error.lines.forEach { printError("  \($0)") }
         if case .unreadable = error {
-            return .unreadableConfig
+            throw Stop(code: .unreadableConfig)
         }
-        return .invalidConfig
+        throw Stop(code: .invalidConfig)
     }
 }
 
-func run(_ arguments: [String]) -> ExitCode {
+func validate(_ arguments: [String]) throws(Stop) {
+    let (url, config) = try loadConfig("validate", arguments)
+    print("\(url.path): OK, \(config.jobs.count) jobs on \(config.hosts.count) hosts")
+}
+
+func status(_ arguments: [String]) throws(Stop) {
+    let (_, config) = try loadConfig("status", arguments)
+    let collector = LaunchdCollector(
+        runner: ProcessCommandRunner(),
+        locations: LaunchdSearchLocation.standard(
+            homeDirectory: FileManager.default.homeDirectoryForCurrentUser,
+            userID: getuid()
+        )
+    )
+    for job in config.jobs {
+        print(job.name == job.id ? job.id : "\(job.id) (\(job.name))")
+        switch (job.source, job.hostID) {
+        case let (.launchd(label), Host.localID):
+            let observation = collector.observe(label: label)
+            print("  launchd:  \(label)")
+            print("  schedule: \(observation.scheduleDescription)")
+            print("  state:    \(observation.statusDescription)")
+        case (.launchd, _), (.systemd, _), (.cron, _):
+            print("  state:    not read yet: only launchd jobs on this Mac are supported so far")
+        case (nil, _):
+            print("  state:    not read yet: this job is known only through its checks")
+        }
+    }
+}
+
+func run(_ arguments: [String]) throws(Stop) {
+    let rest = Array(arguments.dropFirst())
     switch arguments.first {
     case "validate":
-        return validate(Array(arguments.dropFirst()))
+        try validate(rest)
+    case "status":
+        try status(rest)
     case "--version", "-v":
         print("ajoissa \(AjoissaCore.version)")
-        return .success
     case nil, "--help", "-h":
         print(usage)
-        return .success
     case let unknown?:
-        return usageError("unknown argument '\(unknown)'")
+        throw usageError("unknown argument '\(unknown)'")
     }
 }
 
-exit(run(Array(CommandLine.arguments.dropFirst())).rawValue)
+do {
+    try run(Array(CommandLine.arguments.dropFirst()))
+} catch {
+    exit(error.code.rawValue)
+}

@@ -15,6 +15,7 @@ let package = Package(
         // so this package can be published on its own later.
         .target(name: "AjoissaCore"),
         .executableTarget(name: "AjoissaCLI", dependencies: ["AjoissaCore"]),
-        .testTarget(name: "AjoissaCoreTests", dependencies: ["AjoissaCore"])
+        // The fixtures are read from disk by path, so they are not resources of the test bundle.
+        .testTarget(name: "AjoissaCoreTests", dependencies: ["AjoissaCore"], exclude: ["Launchd/Fixtures"])
     ]
 )
