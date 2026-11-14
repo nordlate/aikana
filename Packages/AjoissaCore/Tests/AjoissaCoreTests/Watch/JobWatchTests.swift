@@ -1,7 +1,7 @@
 import AjoissaCore
 import XCTest
 
-final class LocalWatchTests: WatchTestCase {
+final class JobWatchTests: WatchTestCase {
     private let now = TestClock.date("2026-11-14 09:00")
 
     func testALaunchdJobIsReportedWithWhatItsSchedulerSaid() throws {
@@ -65,20 +65,6 @@ final class LocalWatchTests: WatchTestCase {
         XCTAssertEqual(report.checks.map(\.label), ["file-age /backups/*.tar", "file-size /backups/*.tar", "log-pattern /backups/backup.log"])
         XCTAssertEqual(report.checks.first?.outcome.result, .passed)
         XCTAssertEqual(report.logPaths, ["/backups/backup.log"])
-    }
-
-    func testAJobOnAnotherMachineIsListedAndNotJudged() throws {
-        var history = History()
-        let job = "{ id: 'far', host: 'nas', source: { systemd: 'backup.timer' }, schedule: { every: '1h' } }"
-
-        let report = try XCTUnwrap(try look(job, hosts: "{ id: 'nas', ssh: 'nas' }", history: &history).first)
-
-        XCTAssertFalse(report.isJudged)
-        XCTAssertEqual(report.state, .unknown)
-        XCTAssertEqual(report.reason, "not judged yet: only jobs on this Mac are supported so far")
-        XCTAssertEqual(report.schedule, "every 1h")
-        XCTAssertTrue(history.jobs.isEmpty)
-        XCTAssertTrue(runner.calls.isEmpty)
     }
 
     func testAJobOfASchedulerThatIsNotReadYetIsNotJudged() throws {

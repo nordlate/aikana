@@ -60,8 +60,8 @@ struct EvaluationPass {
     }
 
     mutating func run() -> JobEvaluation {
-        guard evidence.hostReachable else {
-            return finish(.hostOffline, "its host cannot be reached")
+        if let verdict = verdictOnHost() {
+            return verdict
         }
         switch evidence.source?.availability {
         case let .unknown(reason):
@@ -112,6 +112,28 @@ struct EvaluationPass {
         }
         record.timetable = timetable
         return timetable
+    }
+
+    /// The verdict when the job's machine cannot be reached or cannot be relied on; `nil` when it can.
+    mutating func verdictOnHost() -> JobEvaluation? {
+        guard evidence.hostReachable else {
+            record.offlineSince = record.offlineSince ?? now
+            return finish(.hostOffline, evidence.hostProblem ?? "its host cannot be reached")
+        }
+        if let offlineSince = record.offlineSince {
+            record.offlineSince = nil
+            comeBackOnline(offlineSince: offlineSince)
+        }
+        // The machine answers, but what it says cannot be relied on.
+        return evidence.hostProblem.map { finishUnreadable($0) }
+    }
+
+    /// The machine answers again. For one that is allowed to be off, nothing that was due while it could not
+    /// be reached is held against the job: the watch starts over. A run that was already missed before the
+    /// machine went away stays missed; being switched off afterwards does not make up for it.
+    mutating func comeBackOnline(offlineSince: Date) {
+        guard evidence.hostMayBeOffline, record.stateBeforeUnreadable != .missed else { return }
+        startWatchOver()
     }
 
     /// From now on is all that is judged: what was open or counted before no longer applies.

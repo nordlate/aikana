@@ -16,9 +16,9 @@ public struct WatchSession: Sendable {
 
     public let configURL: URL
     public let historyFile: HistoryFile
-    private let watch: LocalWatch
+    private let watch: JobWatch
 
-    public init(configURL: URL, historyFile: HistoryFile, watch: LocalWatch) {
+    public init(configURL: URL, historyFile: HistoryFile, watch: JobWatch) {
         self.configURL = configURL
         self.historyFile = historyFile
         self.watch = watch

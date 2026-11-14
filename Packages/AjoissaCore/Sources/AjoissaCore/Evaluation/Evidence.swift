@@ -92,6 +92,12 @@ public struct CheckOutcome: Sendable, Equatable, Codable {
 /// the evaluation only reads it.
 public struct Evidence: Sendable, Equatable {
     public var hostReachable: Bool
+    /// Why the job's machine could not be reached, or could be reached but not used: what `ssh` said, or
+    /// that its clock is off. `nil` when there is nothing wrong with the machine.
+    public var hostProblem: String?
+    /// Whether the machine is one that is allowed to be switched off or asleep. Scheduled times that pass
+    /// while it cannot be reached are then not held against its jobs.
+    public var hostMayBeOffline: Bool
     /// `nil` for a job with no scheduler Ajoissa can read.
     public var source: SourceEvidence?
     /// The machine has been awake without a break since this moment: its last wake, or its start.
@@ -103,12 +109,16 @@ public struct Evidence: Sendable, Equatable {
 
     public init(
         hostReachable: Bool = true,
+        hostProblem: String? = nil,
+        hostMayBeOffline: Bool = false,
         source: SourceEvidence? = nil,
         awakeSince: Date? = nil,
         bootedAt: Date? = nil,
         checks: [CheckOutcome] = []
     ) {
         self.hostReachable = hostReachable
+        self.hostProblem = hostProblem
+        self.hostMayBeOffline = hostMayBeOffline
         self.source = source
         self.awakeSince = awakeSince
         self.bootedAt = bootedAt

@@ -44,7 +44,7 @@ struct JobDetailView: View {
                         section("History") { history }
                     }
                     ForEach(report.logPaths, id: \.self) { path in
-                        LogSection(model: model, path: path, refreshedWith: report)
+                        LogSection(model: model, path: path, isLocal: model.isLocal(jobWithID: report.id), refreshedWith: report)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -138,6 +138,8 @@ struct JobDetailView: View {
 struct LogSection: View {
     let model: WatchModel
     let path: String
+    /// Whether the log is on this Mac, where it can be opened.
+    let isLocal: Bool
     /// The log is read again whenever the job has been looked at again.
     let refreshedWith: JobReport
     @State private var log: WatchModel.LogText?
@@ -155,11 +157,13 @@ struct LogSection: View {
                     .truncationMode(.middle)
                     .help(path)
                 Spacer()
-                Button("Open Log") {
-                    NSWorkspace.shared.open(Self.fileURL(of: path))
+                if isLocal {
+                    Button("Open Log") {
+                        NSWorkspace.shared.open(Self.fileURL(of: path))
+                    }
+                    .controlSize(.small)
+                    .disabled(log == .missing)
                 }
-                .controlSize(.small)
-                .disabled(log == .missing)
             }
             switch log {
             case nil:
@@ -184,7 +188,7 @@ struct LogSection: View {
             }
         }
         .task(id: refreshedWith) {
-            log = await model.logText(at: path)
+            log = await model.logText(at: path, ofJobWithID: refreshedWith.id)
         }
     }
 

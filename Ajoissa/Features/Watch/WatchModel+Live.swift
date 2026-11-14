@@ -9,12 +9,12 @@ extension WatchModel {
         let variables = ProcessInfo.processInfo.environment
         let configURL = ConfigLocation.resolve(explicitPath: nil, environment: variables, homeDirectory: home)
         let historyFile = HistoryFile(environment: variables, homeDirectory: home)
-        let session = WatchSession(
-            configURL: configURL,
-            historyFile: historyFile,
-            watch: LocalWatch(homeDirectory: home, userID: getuid())
+        let watch = JobWatch(
+            homeDirectory: home,
+            userID: getuid(),
+            controlDirectory: home.appending(path: JobWatch.defaultControlDirectory)
         )
-        let host = LocalHost(homeDirectory: home, runner: ProcessCommandRunner())
+        let session = WatchSession(configURL: configURL, historyFile: historyFile, watch: watch)
         let notifier = SystemNotifier()
         let model = WatchModel(environment: Environment(
             configURL: configURL,
@@ -24,8 +24,8 @@ extension WatchModel {
                 await Task.detached { session.round(now: now, calendar: .current, announce: true) }.value
             },
             configFingerprint: { fingerprint(of: configURL) },
-            readLog: { path in
-                await Task.detached { readLog(path, on: host) }.value
+            readLog: { path, host in
+                await Task.detached { readLog(path, on: host, watch: watch) }.value
             },
             deliver: { await notifier.deliver($0) },
             requestNotificationPermission: { await notifier.requestPermission() },
@@ -42,9 +42,9 @@ extension WatchModel {
         return model
     }
 
-    nonisolated static func readLog(_ path: String, on host: any HostAccess) -> LogText {
+    nonisolated static func readLog(_ path: String, on host: WatchedHost, watch: JobWatch) -> LogText {
         do throws(HostAccessError) {
-            return try LogTail.read(path, on: host).map(LogText.text) ?? .missing
+            return try watch.logTail(of: path, on: host).map(LogText.text) ?? .missing
         } catch {
             return .unreadable(error.message)
         }

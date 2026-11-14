@@ -74,20 +74,26 @@ public struct LaunchdObservation: Sendable, Equatable {
     }
 }
 
-/// Reads the state of launchd jobs on this Mac. It only reads: it never loads, starts, stops or edits a job.
+/// Reads the state of launchd jobs on one Mac. It only reads: it never loads, starts, stops or edits a job.
 ///
-/// It runs exactly one command, `/bin/launchctl print <domain>/<label>`, and reads plist files.
+/// It runs exactly one command, `/bin/launchctl print <domain>/<label>`, and reads plist files, both through
+/// a ``LaunchdAccess``: this Mac's, or another Mac's over SSH.
 public struct LaunchdCollector: Sendable {
-    static let launchctl = "/bin/launchctl"
+    public static let launchctl = "/bin/launchctl"
     static let timeout: TimeInterval = 10
     /// `launchctl print` exits with this when the domain has no such job.
     static let serviceNotFoundExitCode: Int32 = 113
 
-    private let runner: any CommandRunner
+    private let access: any LaunchdAccess
     private let locations: [LaunchdSearchLocation]
 
+    /// A collector for this Mac.
     public init(runner: any CommandRunner, locations: [LaunchdSearchLocation]) {
-        self.runner = runner
+        self.init(access: LocalLaunchdAccess(runner: runner), locations: locations)
+    }
+
+    public init(access: any LaunchdAccess, locations: [LaunchdSearchLocation]) {
+        self.access = access
         self.locations = locations
     }
 
@@ -129,7 +135,7 @@ public struct LaunchdCollector: Sendable {
     private func query(label: String, in domain: LaunchdDomain) -> QueryResult {
         let result: CommandResult
         do {
-            result = try runner.run(Self.launchctl, arguments: ["print", domain.target(label: label)], timeout: Self.timeout)
+            result = try access.launchctlPrint(domain.target(label: label), timeout: Self.timeout)
         } catch {
             switch error {
             case let .notStarted(reason): return .failed(reason: "launchctl could not be started: \(reason)")
@@ -193,7 +199,7 @@ public struct LaunchdCollector: Sendable {
     private func findByName(_ label: String, unreadable: inout [String]) -> Found? {
         for location in locations {
             let expected = location.directory.appending(path: "\(label).plist")
-            switch Self.contents(of: expected) {
+            switch access.contents(ofFileAt: expected.path) {
             case .missing:
                 continue
             case .unreadable:
@@ -215,14 +221,14 @@ public struct LaunchdCollector: Sendable {
 
     private func findByContent(_ label: String, unreadable: inout [String]) -> Found? {
         for location in locations {
-            guard let names = Self.plistNames(in: location.directory) else {
+            guard let names = access.plistNames(in: location.directory.path) else {
                 unreadable.append(location.directory.path)
                 continue
             }
             for name in names {
                 // The path is built from the folder as it was given; a listing would resolve symbolic links in it.
                 let file = location.directory.appending(path: name)
-                guard case let .data(data) = Self.contents(of: file), case let .success(definition) = Self.read(data),
+                guard case let .data(data) = access.contents(ofFileAt: file.path), case let .success(definition) = Self.read(data),
                       definition.label == label else { continue }
                 return Found(location: location, path: file.path, definition: definition, problem: nil)
             }
@@ -235,52 +241,16 @@ public struct LaunchdCollector: Sendable {
     private func loadedDefinition(_ state: LaunchdServiceState, found: Found?) -> Found? {
         // launchd also reports things that are not paths here, such as "(submitted by smd.545)".
         guard let reported = state.plistPath, reported.hasPrefix("/") else { return found }
-        if let found, Self.resolved(found.path) == Self.resolved(reported) {
+        if let found, access.resolved(found.path) == access.resolved(reported) {
             return found
         }
-        guard case let .data(data) = Self.contents(of: URL(fileURLWithPath: reported)) else { return found }
+        guard case let .data(data) = access.contents(ofFileAt: reported) else { return found }
         switch Self.read(data) {
         case let .success(definition):
             return Found(location: nil, path: reported, definition: definition, problem: nil)
         case let .failure(error):
             return Found(location: nil, path: reported, definition: nil, problem: error.reason)
         }
-    }
-
-    private static func resolved(_ path: String) -> String {
-        URL(fileURLWithPath: path).resolvingSymlinksInPath().path
-    }
-
-    private enum Contents {
-        case data(Data)
-        case missing
-        /// The file may exist, but reading it failed for another reason than its absence.
-        case unreadable
-    }
-
-    private static func contents(of url: URL) -> Contents {
-        do {
-            return .data(try Data(contentsOf: url))
-        } catch {
-            return isNoSuchFile(error) ? .missing : .unreadable
-        }
-    }
-
-    /// The names of the plist files in a folder, sorted. Empty when the folder does not exist, `nil` when it
-    /// exists but cannot be read.
-    private static func plistNames(in directory: URL) -> [String]? {
-        do {
-            return try FileManager.default.contentsOfDirectory(atPath: directory.path)
-                .filter { $0.hasSuffix(".plist") }
-                .sorted()
-        } catch {
-            return isNoSuchFile(error) ? [] : nil
-        }
-    }
-
-    private static func isNoSuchFile(_ error: any Error) -> Bool {
-        let error = error as NSError
-        return error.domain == NSCocoaErrorDomain && [NSFileReadNoSuchFileError, NSFileNoSuchFileError].contains(error.code)
     }
 
     private static func read(_ data: Data) -> Result<LaunchdJobDefinition, LaunchdPlistError> {

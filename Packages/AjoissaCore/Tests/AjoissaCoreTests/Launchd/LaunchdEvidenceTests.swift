@@ -75,22 +75,6 @@ final class LaunchdEvidenceTests: XCTestCase {
         XCTAssertEqual(LaunchdObservation(label: "x", status: .plistMissing).logPaths, [])
     }
 
-    func testLatestModificationOfFiles() throws {
-        let directory = FileManager.default.temporaryDirectory.appending(path: "ajoissa-times-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let older = directory.appending(path: "older.log")
-        let newer = directory.appending(path: "newer.log")
-        try Data().write(to: older)
-        try Data().write(to: newer)
-        try FileManager.default.setAttributes([.modificationDate: written], ofItemAtPath: older.path)
-        try FileManager.default.setAttributes([.modificationDate: written.addingTimeInterval(60)], ofItemAtPath: newer.path)
-
-        XCTAssertEqual(FileTimes.latestModification(of: [older.path, "/nonexistent/x.log", newer.path]), written.addingTimeInterval(60))
-        XCTAssertNil(FileTimes.latestModification(of: ["/nonexistent/x.log"]))
-        XCTAssertNil(FileTimes.latestModification(of: []))
-    }
-
     func testAwakeSinceIsInThePast() throws {
         let awakeSince = try XCTUnwrap(SystemUptime.awakeSince())
 

@@ -46,7 +46,7 @@ final class FakeCommandRunner: CommandRunner, @unchecked Sendable {
         answer(target, with: .success(CommandResult(exitCode: 0, output: output)))
     }
 
-    func run(_ executable: String, arguments: [String], timeout: TimeInterval) throws(CommandError) -> CommandResult {
+    func run(_ executable: String, arguments: [String], input: Data?, timeout: TimeInterval) throws(CommandError) -> CommandResult {
         let answer = lock.withLock {
             recorded.append([executable] + arguments)
             return answers[arguments.last ?? ""]
