@@ -1,4 +1,4 @@
-project: Ajoissa.xcodeproj
+project: Aikana.xcodeproj
 retain_assign_only_properties: true
 schemes:
-- Ajoissa
+- Aikana
