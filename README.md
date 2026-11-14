@@ -1,24 +1,24 @@
-# Ajoissa
+# Aikana
 
 A macOS menu bar app that answers one question: did everything that should have run actually run, on all my machines?
 
-Ajoissa watches scheduled jobs (launchd on Macs, systemd timers and cron on Linux over SSH). You declare in a config file what is expected to run, where, when, and what counts as success. Ajoissa reports jobs that failed, jobs that never ran, and jobs that exited cleanly but did not produce their result.
+Aikana watches scheduled jobs (launchd on Macs, systemd timers and cron on Linux over SSH). You declare in a config file what is expected to run, where, when, and what counts as success. Aikana reports jobs that failed, jobs that never ran, and jobs that exited cleanly but did not produce their result.
 
-"Ajoissa" is Finnish for "on time".
+"Aikana" is Finnish for "during": it tells you what happened during the night, while nobody was looking.
 
 ## Status
 
-Early. `ajoissa status` gives a verdict on each job: whether the run that was last due happened, failed or is missing, and whether it left behind what its checks ask for. The menu bar app shows the same verdicts, keeps them current and sends a notification when a job gets into trouble. Jobs can be on this Mac or on machines reached over SSH: launchd jobs on Macs, and jobs known only through their checks on Macs and Linux. systemd and cron jobs are listed and not read yet. The plan is in the issues, in three milestones: one Mac, other machines, release.
+Early. `aikana status` gives a verdict on each job: whether the run that was last due happened, failed or is missing, and whether it left behind what its checks ask for. The menu bar app shows the same verdicts, keeps them current and sends a notification when a job gets into trouble. Jobs can be on this Mac or on machines reached over SSH: launchd jobs on Macs, and jobs known only through their checks on Macs and Linux. systemd and cron jobs are listed and not read yet. The plan is in the issues, in three milestones: one Mac, other machines, release.
 
 ## Config
 
-Ajoissa reads `~/.config/ajoissa/config.json5`. Another file can be named with `--config <path>` or the `AJOISSA_CONFIG` environment variable. The format is JSON5, so comments and trailing commas are fine.
+Aikana reads `~/.config/aikana/config.json5`. Another file can be named with `--config <path>` or the `AIKANA_CONFIG` environment variable. The format is JSON5, so comments and trailing commas are fine.
 
-Start from [`Packages/AjoissaCore/Examples/config.example.json5`](Packages/AjoissaCore/Examples/config.example.json5), which shows every setting, then check your file:
+Start from [`Packages/AikanaCore/Examples/config.example.json5`](Packages/AikanaCore/Examples/config.example.json5), which shows every setting, then check your file:
 
 ```sh
-cd Packages/AjoissaCore
-swift run ajoissa validate --config ~/.config/ajoissa/config.json5
+cd Packages/AikanaCore
+swift run aikana validate --config ~/.config/aikana/config.json5
 ```
 
 `validate` lists every problem at once, each with where it is, and exits with 0 for a usable file, 1 for a file that breaks a rule and 66 for a file it cannot read. Settings it does not know, and settings written twice in the same object, are reported as errors, so a misspelled or repeated setting is not silently ignored.
@@ -29,11 +29,11 @@ The menu bar icon has three states: everything is fine, something needs attentio
 
 The panel lists the jobs by machine, those that need a look first. A job opens to its schedule, what its scheduler said, each check with its result, the verdicts it has been through, and the end of its log with a button that opens the file.
 
-Ajoissa looks at every job once a minute, when the Mac wakes, and when you press refresh (⌘R in the list). It reads the config file again within a few seconds of a change. A config that cannot be used is shown with every problem in it, in place of the list; fix the file and the list comes back by itself. A history file that cannot be read or saved turns the icon to "needs attention" too.
+Aikana looks at every job once a minute, when the Mac wakes, and when you press refresh (⌘R in the list). It reads the config file again within a few seconds of a change. A config that cannot be used is shown with every problem in it, in place of the list; fix the file and the list comes back by itself. A history file that cannot be read or saved turns the icon to "needs attention" too.
 
 ### Notifications
 
-Ajoissa sends a system notification when a job is found `failed`, `missed` or `stale`, naming the job, the machine and the reason. You hear about each incident once: nothing is repeated while the job stays in trouble, including when it waits for its next run and fails again. When the job is `ok` again you get one more notification, and after that a new problem is a new incident. A problem that turns into another kind, such as `missed` into `failed`, is told again.
+Aikana sends a system notification when a job is found `failed`, `missed` or `stale`, naming the job, the machine and the reason. You hear about each incident once: nothing is repeated while the job stays in trouble, including when it waits for its next run and fails again. When the job is `ok` again you get one more notification, and after that a new problem is a new incident. A problem that turns into another kind, such as `missed` into `failed`, is told again.
 
 Everything one look finds is combined into one notification. Clicking a notification about one job opens the panel on that job.
 
@@ -45,28 +45,28 @@ Everything one look finds is combined into one notification. Clicking a notifica
 
 The first look after installing tells, in one notification, every job that is already in trouble.
 
-What you were last told about a job is kept in its record in the history file, so restarting Ajoissa does not repeat it. `ajoissa status` reads and writes the same history and never uses it up. The first time, macOS asks whether Ajoissa may show notifications; one that is due before you answer is not shown later.
+What you were last told about a job is kept in its record in the history file, so restarting Aikana does not repeat it. `aikana status` reads and writes the same history and never uses it up. The first time, macOS asks whether Aikana may show notifications; one that is due before you answer is not shown later.
 
-The menu at the bottom opens the config file (or shows where it should be when there is none), shows the history folder, holds the notification switches, and sets whether Ajoissa opens at login.
+The menu at the bottom opens the config file (or shows where it should be when there is none), shows the history folder, holds the notification switches, and sets whether Aikana opens at login.
 
-The app uses the same config and history files as `ajoissa status`, and honours `AJOISSA_CONFIG` and `AJOISSA_HISTORY`.
+The app uses the same config and history files as `aikana status`, and honours `AIKANA_CONFIG` and `AIKANA_HISTORY`.
 
 ## Other machines
 
-A host in the config names an alias from your own `~/.ssh/config`. Ajoissa runs the system `ssh` with that alias and stores no addresses, keys or passwords; whatever your SSH config and agent do for `ssh <alias>` in a terminal, they do here.
+A host in the config names an alias from your own `~/.ssh/config`. Aikana runs the system `ssh` with that alias and stores no addresses, keys or passwords; whatever your SSH config and agent do for `ssh <alias>` in a terminal, they do here.
 
 - **No questions are asked.** The connection must work without typing anything: a key in the agent or without a passphrase, and a host key that is already known. Connect once by hand first. A connection that would need a prompt counts as unreachable.
 - **`host offline` is its own state.** A machine that cannot be connected to within 10 seconds, or does not answer the first question within another 15, is offline. Its jobs are neither judged nor checked, and the reason `ssh` gave is shown. It needs attention unless the host has `mayBeOffline: true`.
 - **A machine that may be offline** is shown as offline without turning the icon. When it is back, scheduled times that passed while it was off or asleep are not held against its jobs, and for a job on an interval that time does not count. Nothing else is forgiven. A run that was already due when the machine was last seen is still expected. So is one whose time passed while the machine was awake and only out of reach: the job could run then, and the machine says whether it did.
 - **A machine that should be on** gets no such allowance: if it was unreachable over a scheduled time and the run did not happen, the run is missed.
 - **Times are the machine's own.** A job's schedule is read in the time zone of the machine it runs on. A machine whose clock differs from this Mac's by more than two minutes is not judged; its jobs are `unknown` and say so.
-- **One connection per machine** is kept open for ten minutes after its last use, through a socket in `~/Library/Caches/Ajoissa/cm`, so a look does not connect once per job.
+- **One connection per machine** is kept open for ten minutes after its last use, through a socket in `~/Library/Caches/Aikana/cm`, so a look does not connect once per job.
 - **Machines are looked at side by side.** When a script that only reads gets no answer, for at most 25 seconds, the machine is given up on for that look: the rest of its jobs are `unknown` without further waiting. A `launchctl` or `command` check that takes too long is waited for by its own timeout and does not count against the machine. A look is finished when the slowest machine has answered or been given up on.
 - **What the remote user's shell prints at login** (a banner, a line from a startup file) is ignored.
 
-## What Ajoissa runs and reads
+## What Aikana runs and reads
 
-Ajoissa only reads. On this Mac it runs one command and reads one kind of file:
+Aikana only reads. On this Mac it runs one command and reads one kind of file:
 
 - `/bin/launchctl print gui/<your user id>/<label>` or `/bin/launchctl print system/<label>`, for each launchd job in your config. The label is refused unless it is one plain word.
 - The plist files in `~/Library/LaunchAgents`, `/Library/LaunchAgents` and `/Library/LaunchDaemons`, to find each job's timetable and log paths, and the plist launchd says a job was loaded from.
@@ -79,7 +79,7 @@ Beyond that it runs only what you tell it to: the program of each `command` chec
 
 ### On other machines
 
-For a host reached over SSH, Ajoissa runs exactly this, with nothing from your config on the command line:
+For a host reached over SSH, Aikana runs exactly this, with nothing from your config on the command line:
 
 ```sh
 /usr/bin/ssh -T -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 -o ControlMaster=auto -o ControlPath=<socket> -o ControlPersist=600 -- <alias> /bin/sh
@@ -87,7 +87,7 @@ For a host reached over SSH, Ajoissa runs exactly this, with nothing from your c
 
 The three `Control` options are left out when the path of your home folder is too long for a socket or has a space, `%`, quote or backslash in it; every script then makes its own connection.
 
-What the remote `/bin/sh` does is a short script sent on its input. There are seven scripts, all in [`RemoteCommands.swift`](Packages/AjoissaCore/Sources/AjoissaCore/Remote/RemoteCommands.swift), and no others. Paths, patterns and arguments from your config appear in them only as single-quoted words, which a POSIX shell reads as plain text.
+What the remote `/bin/sh` does is a short script sent on its input. There are seven scripts, all in [`RemoteCommands.swift`](Packages/AikanaCore/Sources/AikanaCore/Remote/RemoteCommands.swift), and no others. Paths, patterns and arguments from your config appear in them only as single-quoted words, which a POSIX shell reads as plain text.
 
 | Script | What it runs on the machine | Why |
 |---|---|---|
@@ -102,19 +102,19 @@ What the remote `/bin/sh` does is a short script sent on its input. There are se
 Every script also uses the shell's own `printf` to write its answer, and sets `LC_ALL=C` for itself. All of them only read, except a `command` check, which does whatever your program does.
 
 ```sh
-cd Packages/AjoissaCore
-swift run ajoissa status --config ~/.config/ajoissa/config.json5
+cd Packages/AikanaCore
+swift run aikana status --config ~/.config/aikana/config.json5
 ```
 
 ## How a job is judged
 
-Each time Ajoissa looks at a job it asks one question: is there a scheduled time that no run accounts for? A run that is seen accounts for every scheduled time up to that moment. The verdict is about the oldest scheduled time still open, so a job that has stopped is reported once and stays reported until it runs again.
+Each time Aikana looks at a job it asks one question: is there a scheduled time that no run accounts for? A run that is seen accounts for every scheduled time up to that moment. The verdict is about the oldest scheduled time still open, so a job that has stopped is reported once and stays reported until it runs again.
 
 | Verdict | Meaning |
 | --- | --- |
 | `ok` | Every scheduled time so far is accounted for, and nothing about the last run failed. |
 | `running` | The job is running now. |
-| `waiting` | A run is due and still within its grace period, or no run has been due since Ajoissa started watching. |
+| `waiting` | A run is due and still within its grace period, or no run has been due since Aikana started watching. |
 | `failed` | The last run exited with an error or was killed, a check failed, or the job cannot run at all (not loaded, or not found). |
 | `missed` | A run was due, its grace period is over, and there is no sign of it. It stays missed until a run is seen. |
 | `unknown` | The job's state could not be read just now. This says nothing about the job. |
@@ -129,8 +129,8 @@ Things worth knowing:
 - **Jobs on an interval** have no scheduled times. They are missed when the interval plus the grace has passed since the last run that was seen. Time asleep does not count.
 - **A wake does not undo a miss.** Whether a scheduled time passed during sleep is settled when it is first found open. Waking the Mac later gives a run that was already missed no new grace period.
 - **A run in progress counts.** launchd does not start a job that is still running, so a long run accounts for a scheduled time it runs through.
-- **Nothing is judged in hindsight.** A run that was due before Ajoissa first saw the job, or before its timetable changed, is not called missed. Evidence that it did happen is still believed.
-- **History** is kept in `~/Library/Application Support/Ajoissa/history.json` (or the file `AJOISSA_HISTORY` names). launchd keeps no history of its own, so this file is what makes "the run count went up since last time" possible. A history file that cannot be read stops Ajoissa instead of being replaced.
+- **Nothing is judged in hindsight.** A run that was due before Aikana first saw the job, or before its timetable changed, is not called missed. Evidence that it did happen is still believed.
+- **History** is kept in `~/Library/Application Support/Aikana/history.json` (or the file `AIKANA_HISTORY` names). launchd keeps no history of its own, so this file is what makes "the run count went up since last time" possible. A history file that cannot be read stops Aikana instead of being replaced.
 
 ### Checks
 
@@ -146,7 +146,7 @@ A job can exit with code 0 and still have produced nothing. Checks say what a su
 - **Three results.** A check passes, fails, or could not be carried out (a folder without permission, a command that hangs). The last makes the job `unknown`, never `failed`.
 - **A check can prove a run.** A file newer than the scheduled time, or a wanted line in the log, shows the job ran even when the run itself was not seen.
 - **A failing check does not fail a job whose run still has time.** Yesterday's report is expected to be old at 02:01.
-- **Only what the run wrote.** A log only grows. Ajoissa notes where each log ends every time it looks, and reads from where the log stood before the run. A log it first sees after the run has already written to it is let through once and read properly from the next run on. A log that was emptied, rewritten or rotated is noticed and read from its start.
+- **Only what the run wrote.** A log only grows. Aikana notes where each log ends every time it looks, and reads from where the log stood before the run. A log it first sees after the run has already written to it is let through once and read properly from the next run on. A log that was emptied, rewritten or rotated is noticed and read from its start.
 - **A run started by hand is judged on its own output.** If the scheduled run failed and you run the job again, the log check reads that run's lines and the commands are asked again.
 - **Commands are not run at every look.** A `command` check runs once the job has run, and its result is kept for that run. It is asked again after 15 minutes, and at once when a new run is seen.
 - **Paths** may contain `*`, `?` and `[...]`, and `~/` for the home directory. `**` is not supported.
@@ -155,7 +155,7 @@ A job can exit with code 0 and still have produced nothing. Checks say what a su
 
 ### Limits
 
-- **A command check that hangs on another machine** is given up on after its timeout, but the program may keep running there. Ajoissa has no way to stop it that works on every system.
+- **A command check that hangs on another machine** is given up on after its timeout, but the program may keep running there. Aikana has no way to stop it that works on every system.
 - **Paths on other machines:** a folder that cannot be read is told from "nothing there" only up to the first wildcard in a path. Behind a wildcard folder, such as `/data/*/out/x.log`, an unreadable folder looks empty.
 - **File times on other machines** are read to the second.
 - **Links on other machines** are not resolved when a job's plist is compared with the file launchd loaded it from; the file launchd names is then read once more.
@@ -163,12 +163,12 @@ A job can exit with code 0 and still have produced nothing. Checks say what a su
 - **A machine that may be offline and sleeps through a job's time every day** never has that job reported missed. That is what the setting means; leave it off for a machine whose jobs you want to hear about.
 - **`stat` is run as `/usr/bin/stat`** on other machines. Where it is somewhere else, file checks cannot be carried out.
 - **Linux:** checks work on a Linux host, but when it last started or woke is not read yet, and neither are systemd and cron. A Linux machine that may be offline is therefore taken to have been off for as long as it could not be reached.
-- **A machine that may be offline, between two looks:** when Ajoissa itself was not looking, the machine is taken to have gone away right after the last look that found it.
+- **A machine that may be offline, between two looks:** when Aikana itself was not looking, the machine is taken to have gone away right after the last look that found it.
 - **A file or argument with a line break in it** cannot be used on another machine.
-- **The app and `ajoissa status` at the same moment.** Both read the history, look, and write it back. If the two overlap, what the one that finishes first saw is overwritten. It is seen again at the next look.
+- **The app and `aikana status` at the same moment.** Both read the history, look, and write it back. If the two overlap, what the one that finishes first saw is overwritten. It is seen again at the next look.
 
-- **Switched off at the scheduled time.** launchd does not make up for a time that passed while the Mac was off. Ajoissa reports that as missed once the grace after starting is over. It is true, even though nothing is wrong with the job.
-- **Looking only now and then.** The run count has no timestamps. When Ajoissa has not looked for a while, it compares how many runs started with how many were scheduled. A run started by hand in that gap can then stand in for a scheduled one that did not happen, and a reload after an unseen run can hide it. With the app looking every minute this does not arise.
+- **Switched off at the scheduled time.** launchd does not make up for a time that passed while the Mac was off. Aikana reports that as missed once the grace after starting is over. It is true, even though nothing is wrong with the job.
+- **Looking only now and then.** The run count has no timestamps. When Aikana has not looked for a while, it compares how many runs started with how many were scheduled. A run started by hand in that gap can then stand in for a scheduled one that did not happen, and a reload after an unseen run can hide it. With the app looking every minute this does not arise.
 - **Log files** count as evidence when they are written. A log that something else also writes to makes a job look as if it ran.
 - **A timetable with both calendar times and an interval** is judged by its calendar times only, and the interval's runs account for them.
 - **A plist edited but not reloaded.** The timetable is read from the file, while launchd keeps the one from when it loaded the job.
@@ -184,20 +184,20 @@ A job can exit with code 0 and still have produced nothing. Checks say what a su
 ## Layout
 
 ```
-Ajoissa/                  Menu bar app (SwiftUI, MenuBarExtra)
-AjoissaTests/             App tests
-Packages/AjoissaCore/     The engine, a Swift package
-  Sources/AjoissaCore/    Config, collectors, schedule logic, checks
-  Sources/AjoissaCLI/     The `ajoissa` command line tool
+Aikana/                  Menu bar app (SwiftUI, MenuBarExtra)
+AikanaTests/             App tests
+Packages/AikanaCore/     The engine, a Swift package
+  Sources/AikanaCore/    Config, collectors, schedule logic, checks
+  Sources/AikanaCLI/     The `aikana` command line tool
   Examples/               Example config
-  Tests/AjoissaCoreTests/ Engine tests
+  Tests/AikanaCoreTests/ Engine tests
 ```
 
 ## Principles
 
-- **Read-only.** Ajoissa never starts, stops or edits a job.
+- **Read-only.** Aikana never starts, stops or edits a job.
 - **Nothing personal in the repo.** No real host names, paths or job names. Each user's setup is a config file kept elsewhere.
-- **The engine stands alone.** `AjoissaCore` uses Foundation only and does not depend on the app, so it can be published as its own package.
+- **The engine stands alone.** `AikanaCore` uses Foundation only and does not depend on the app, so it can be published as its own package.
 - **Not sandboxed.** The app needs `launchctl`, `ssh` and the user's SSH config. It is distributed directly, not through the Mac App Store.
 
 ## Build and test
@@ -205,14 +205,14 @@ Packages/AjoissaCore/     The engine, a Swift package
 Requires Xcode 27 and macOS 15.3 or later.
 
 ```sh
-xcodebuild -scheme Ajoissa -destination 'platform=macOS' build
-xcodebuild test -scheme Ajoissa -destination 'platform=macOS,arch=arm64'
+xcodebuild -scheme Aikana -destination 'platform=macOS' build
+xcodebuild test -scheme Aikana -destination 'platform=macOS,arch=arm64'
 ```
 
 The engine and the command line tool also build without Xcode's project:
 
 ```sh
-cd Packages/AjoissaCore
+cd Packages/AikanaCore
 swift test
-swift run ajoissa --version
+swift run aikana --version
 ```

@@ -1,12 +1,12 @@
 included:
-  - Ajoissa
-  - AjoissaTests
-  - Packages/AjoissaCore/Sources
-  - Packages/AjoissaCore/Tests
+  - Aikana
+  - AikanaTests
+  - Packages/AikanaCore/Sources
+  - Packages/AikanaCore/Tests
 
 excluded:
   - .build
-  - Packages/AjoissaCore/.build
+  - Packages/AikanaCore/.build
 
 opt_in_rules:
   - empty_count

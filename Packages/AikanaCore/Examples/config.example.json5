@@ -1,0 +1,96 @@
+// Example Aikana config. Copy it to ~/.config/aikana/config.json5 and edit it,
+// then run `aikana validate` to check it.
+//
+// The format is JSON5: comments, trailing commas and unquoted keys are fine.
+// Every host and job here is made up.
+{
+  version: 1,
+
+  // Machines other than this Mac. "local" always exists and means the Mac Aikana runs on.
+  hosts: [
+    // "ssh" is a host alias from your ~/.ssh/config. Aikana stores no addresses or keys.
+    // "ssh studio-mac" must work in a terminal without asking for anything.
+    { id: "studio", ssh: "studio-mac" },
+
+    // A machine that is allowed to be switched off. Being unreachable is then not reported as a problem,
+    // and what was due while it was away is not counted as missed.
+    { id: "tower", ssh: "tower", mayBeOffline: true },
+  ],
+
+  jobs: [
+    // A launchd job on this Mac. Its schedule is read from launchd, so none is given here.
+    // The check makes "ran" mean "wrote a report", not only "exited with code 0".
+    {
+      id: "nightly-report",
+      name: "Nightly report",
+      source: { launchd: "com.example.nightly-report" },
+      checks: [
+        // No maxAge: the file must be newer than the job's last expected run.
+        { type: "file-age", path: "~/Reports/*.md" },
+        // Without a path, the log file from the launchd job definition is used.
+        { type: "log-pattern", notContains: "Traceback" },
+      ],
+    },
+
+    // A backup that must not be suspiciously small. Problems are shown but do not notify.
+    {
+      id: "photo-backup",
+      name: "Photo backup",
+      source: { launchd: "com.example.photo-backup" },
+      grace: "2h",
+      notify: false,
+      checks: [
+        { type: "file-size", path: "/Volumes/Backup/photos/*.tar", minSize: "500MB" },
+      ],
+    },
+
+    // A launchd job on another Mac.
+    {
+      id: "render-cleanup",
+      host: "studio",
+      source: { launchd: "com.example.render-cleanup" },
+    },
+
+    // A systemd timer on a Linux machine. "scope" is "system" (the default) or "user".
+    {
+      id: "tower-updates",
+      name: "Package updates",
+      host: "tower",
+      source: { systemd: "package-update.timer" },
+    },
+
+    // A cron job, found by text that appears in exactly one crontab line.
+    // cron records no result, so the checks are what tell whether it ran.
+    {
+      id: "tower-db-dump",
+      name: "Database dump",
+      host: "tower",
+      source: { cron: "dump-database.sh" },
+      checks: [
+        { type: "file-age", path: "/var/backups/db/*.sql.gz", maxAge: "26h" },
+        { type: "log-pattern", path: "/var/log/db-dump.log", contains: "dump complete" },
+      ],
+    },
+
+    // A job with no scheduler Aikana can read: say when it should run, and how to tell that it did.
+    {
+      id: "weekly-export",
+      name: "Weekly export",
+      schedule: { weekly: { day: "mon", at: "06:30" } },
+      checks: [
+        // The program and its arguments, run without a shell. Exit code 0 passes.
+        { type: "command", run: ["/usr/bin/test", "-s", "/Users/Shared/export/latest.csv"], timeout: "10s" },
+      ],
+    },
+
+    // Other ways to state a schedule: { daily: "02:00" } and { every: "15m" }.
+    {
+      id: "sync-heartbeat",
+      schedule: { every: "15m" },
+      grace: "5m",
+      checks: [
+        { type: "file-age", path: "~/.cache/sync/heartbeat", maxAge: "20m" },
+      ],
+    },
+  ],
+}
