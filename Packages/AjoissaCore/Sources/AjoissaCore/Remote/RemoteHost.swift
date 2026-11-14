@@ -77,7 +77,7 @@ public struct RemoteFacts: Sendable, Equatable {
 /// reported as something that could not be looked at, never as a file that is not there.
 public struct RemoteHost: HostAccess, LaunchdAccess {
     /// How long a script that only reads may take.
-    public static let readTimeout: TimeInterval = 20
+    public static let readTimeout: TimeInterval = 15
 
     /// The name the machine has in the config, for messages.
     public let name: String
@@ -112,17 +112,26 @@ public struct RemoteHost: HostAccess, LaunchdAccess {
 
     public func files(matching pattern: String) throws(HostAccessError) -> [HostFile] {
         let expanded = try expand(pattern)
+        // A pattern in the home folder is matched from inside it, so that the folder's own name is never
+        // read as part of the pattern.
+        let inHome = pattern.hasPrefix("~/")
         let script = RemoteCommands.files(
-            matching: expanded,
+            matching: inHome ? "./" + pattern.dropFirst(2) : expanded,
+            in: inHome ? facts.home : nil,
             folders: Self.folders(on: expanded),
             limit: LocalHost.matchLimit,
             stat: stat
         )
         let reply = try send(script, about: pattern)
         switch reply.status {
-        case "ok": return try Self.files(in: reply.output, about: pattern)
+        case "ok":
+            return try Self.files(in: reply.output, about: pattern).map { file in
+                guard inHome, file.path.hasPrefix("./") else { return file }
+                return HostFile(path: facts.home + "/" + file.path.dropFirst(2), modified: file.modified, size: file.size, identity: file.identity)
+            }
         case "toomany": throw HostAccessError("\(pattern) matches more than \(LocalHost.matchLimit) files; narrow it down")
         case "unsearchable": throw HostAccessError("\(pattern) could not be searched: a folder on the way could not be read")
+        case "statfailed": throw HostAccessError("\(pattern) could not be looked at: \(name) could not describe a file it matches")
         default: throw unexpected(reply, about: pattern)
         }
     }
@@ -133,6 +142,7 @@ public struct RemoteHost: HostAccess, LaunchdAccess {
         switch reply.status {
         case "ok": return try Self.files(in: reply.output, about: path).first
         case "unsearchable": throw HostAccessError("\(path) could not be read: a folder on the way could not be read")
+        case "statfailed": throw HostAccessError("\(path) could not be looked at: \(name) could not describe the file")
         default: throw unexpected(reply, about: path)
         }
     }
@@ -159,7 +169,7 @@ public struct RemoteHost: HostAccess, LaunchdAccess {
         let expandedProgram = program.hasPrefix("~/") ? facts.home + "/" + program.dropFirst(2) : program
         let reply: RemoteShell.Reply
         do {
-            reply = try shell.run(RemoteCommands.run([expandedProgram] + arguments.dropFirst()), timeout: timeout)
+            reply = try shell.run(RemoteCommands.run([expandedProgram] + arguments.dropFirst()), timeout: timeout, mayHang: true)
         } catch {
             switch error {
             case .timedOut: throw .timedOut(after: timeout)
@@ -183,7 +193,7 @@ public struct RemoteHost: HostAccess, LaunchdAccess {
 
     public func contents(ofFileAt path: String) -> FileContents {
         guard ShellQuoting.isQuotable(path),
-              let reply = try? shell.run(RemoteCommands.read(path, from: 0, count: nil), timeout: Self.readTimeout) else {
+              let reply = try? shell.run(RemoteCommands.read(Self.anchored(path), from: 0, count: nil), timeout: Self.readTimeout) else {
             return .unreadable
         }
         switch reply.status {
@@ -195,7 +205,7 @@ public struct RemoteHost: HostAccess, LaunchdAccess {
 
     public func plistNames(in directory: String) -> [String]? {
         guard ShellQuoting.isQuotable(directory),
-              let reply = try? shell.run(RemoteCommands.plistNames(in: directory), timeout: Self.readTimeout) else {
+              let reply = try? shell.run(RemoteCommands.plistNames(in: Self.anchored(directory)), timeout: Self.readTimeout) else {
             return nil
         }
         switch reply.status {
@@ -218,7 +228,12 @@ public struct RemoteHost: HostAccess, LaunchdAccess {
         guard ShellQuoting.isQuotable(path) else {
             throw HostAccessError("\(path) has a line break in it")
         }
-        return path.hasPrefix("~/") ? facts.home + "/" + path.dropFirst(2) : path
+        return Self.anchored(path.hasPrefix("~/") ? facts.home + "/" + path.dropFirst(2) : path)
+    }
+
+    /// A relative path, written so that no tool can read it as an option, whatever it starts with.
+    static func anchored(_ path: String) -> String {
+        path.hasPrefix("/") || path.hasPrefix("./") ? path : "./" + path
     }
 
     private func send(_ script: String, about path: String) throws(HostAccessError) -> RemoteShell.Reply {

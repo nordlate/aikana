@@ -39,8 +39,27 @@ public struct RemoteShell: Sendable {
     static let keepConnection: TimeInterval = 600
     /// A socket path longer than this is refused by the system; `ssh` adds 40 characters of its own.
     static let longestControlDirectory = 60
-    /// What every script starts with: messages of tools are compared, so they must not be translated.
-    static let preamble = "LC_ALL=C\nexport LC_ALL\n"
+    /// The line every script's output starts with. Anything before it was written by the remote user's own
+    /// shell startup files, not by the script, and is dropped.
+    static let begin = "ajoissa:begin\n"
+    /// What every script starts with: the line that marks where its output begins, and a fixed language,
+    /// because messages of tools are compared and must not be translated.
+    static let preamble = "printf 'ajoissa:begin\\n'\nLC_ALL=C\nexport LC_ALL\n"
+    /// Characters that `ssh` reads specially in a socket path, or that would split it in two.
+    static let unusableInControlPath = CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: "%\"'\\"))
+
+    /// Remembers that a machine stopped answering, so that the rest of a look does not wait for it again.
+    private final class Breaker: @unchecked Sendable {
+        private let lock = NSLock()
+        private var stored: RemoteShellError?
+
+        var tripped: RemoteShellError? {
+            get { lock.withLock { stored } }
+            set { lock.withLock { stored = newValue } }
+        }
+    }
+
+    private var breaker: Breaker?
 
     private let runner: any CommandRunner
     private let executable: String
@@ -61,6 +80,14 @@ public struct RemoteShell: Sendable {
         Self(runner: runner, executable: sshPath, arguments: sshArguments(alias: alias, controlDirectory: controlDirectory))
     }
 
+    /// The same shell for the length of one look: once the machine does not answer, every later script fails
+    /// at once with the same reason instead of waiting out its own timeout.
+    public func forOneLook() -> Self {
+        var shell = self
+        shell.breaker = Breaker()
+        return shell
+    }
+
     /// The arguments `ssh` is run with. This is the whole of what Ajoissa adds to the user's own settings.
     static func sshArguments(alias: String, controlDirectory: URL?) -> [String] {
         var arguments = [
@@ -68,9 +95,13 @@ public struct RemoteShell: Sendable {
             // known yet, is a failure to connect, not a prompt nobody sees.
             "-T",
             "-o", "BatchMode=yes",
-            "-o", "ConnectTimeout=\(Int(connectTimeout))"
+            "-o", "ConnectTimeout=\(Int(connectTimeout))",
+            // A connection that has gone quiet is given up after about ten seconds, not when TCP notices.
+            "-o", "ServerAliveInterval=5",
+            "-o", "ServerAliveCountMax=2"
         ]
-        if let controlDirectory, controlDirectory.path.count <= longestControlDirectory {
+        if let controlDirectory, controlDirectory.path.count <= longestControlDirectory,
+           controlDirectory.path.rangeOfCharacter(from: unusableInControlPath) == nil {
             arguments += [
                 "-o", "ControlMaster=auto",
                 "-o", "ControlPath=\(controlDirectory.path)/%C",
@@ -93,8 +124,27 @@ public struct RemoteShell: Sendable {
 
     /// Runs a script and waits for it.
     ///
-    /// - Parameter timeout: How long the script itself may take. The time to connect comes on top.
-    public func run(_ script: String, timeout: TimeInterval) throws(RemoteShellError) -> Reply {
+    /// - Parameters:
+    ///   - timeout: How long the script itself may take. The time to connect comes on top.
+    ///   - mayHang: Whether the script runs a program of the user's, which may take too long without the
+    ///     machine being at fault. Its timing out then says nothing about the machine.
+    public func run(_ script: String, timeout: TimeInterval, mayHang: Bool = false) throws(RemoteShellError) -> Reply {
+        if let tripped = breaker?.tripped {
+            throw tripped
+        }
+        do {
+            return try send(script, timeout: timeout)
+        } catch {
+            switch error {
+            case .unreachable: breaker?.tripped = error
+            case .timedOut where !mayHang: breaker?.tripped = error
+            case .timedOut, .broken: break
+            }
+            throw error
+        }
+    }
+
+    private func send(_ script: String, timeout: TimeInterval) throws(RemoteShellError) -> Reply {
         let result: CommandResult
         do {
             result = try runner.run(
@@ -123,8 +173,15 @@ public struct RemoteShell: Sendable {
             throw .broken(said.map { "the script did not finish: \($0)" } ?? "the script did not finish")
         }
         lines.removeLast()
+        // The report is written on a line of its own, whatever came before it.
+        while lines.last?.isEmpty == true {
+            lines.removeLast()
+        }
+        guard let start = result.outputData.range(of: Data(Self.begin.utf8)) else {
+            throw .broken("the script did not start")
+        }
         return Reply(
-            output: result.outputData,
+            output: result.outputData[start.upperBound...],
             errorOutput: lines.joined(separator: "\n"),
             status: String(last.dropFirst(Self.marker.count))
         )

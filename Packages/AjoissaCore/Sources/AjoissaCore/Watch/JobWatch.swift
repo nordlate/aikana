@@ -158,7 +158,7 @@ public struct JobWatch: Sendable {
             machine.collector = collector
             machine.uptime = uptime()
         case let .ssh(alias):
-            let shell = remoteShell(alias)
+            let shell = remoteShell(alias).forOneLook()
             let facts: RemoteFacts
             do {
                 facts = try RemoteHost.probe(shell)

@@ -123,7 +123,7 @@ final class RemoteHostTests: RemoteHostTestCase {
         for index in 1...4 {
             try write("many/\(index).md")
         }
-        let script = RemoteCommands.files(matching: "\(root.path)/many/*.md", folders: [], limit: 3, stat: .bsd)
+        let script = RemoteCommands.files(matching: "\(root.path)/many/*.md", in: nil, folders: [], limit: 3, stat: .bsd)
         for shellPath in Self.shells {
             XCTAssertEqual(try shell(shellPath).run(script, timeout: 5).status, "toomany", shellPath)
         }
@@ -135,6 +135,52 @@ final class RemoteHostTests: RemoteHostTestCase {
         try inEveryShell { host in
             XCTAssertEqual(try host.file(at: "\(root.path)/lit/[a].md")?.size, 5)
             XCTAssertEqual(try host.files(matching: "\(root.path)/lit/[a].md").map(\.size), [7])
+        }
+    }
+
+    func testAHomeFolderWithPatternCharactersInItsNameIsNotReadAsAPattern() throws {
+        let oddHome = "ho'me $(touch pwned) [a]*"
+        try write("\(oddHome)/logs/run.log", "12345")
+        try write("\(oddHome)/logs/-dash.log", "1")
+        for shellPath in Self.shells {
+            var facts = try RemoteHost.probe(shell(shellPath))
+            facts.home = root.appending(path: oddHome).path
+            let host = RemoteHost(name: "studio", shell: shell(shellPath), facts: facts)
+
+            XCTAssertEqual(try host.files(matching: "~/logs/*.log").map(\.path), ["\(facts.home)/logs/-dash.log", "\(facts.home)/logs/run.log"], shellPath)
+            XCTAssertEqual(try host.files(matching: "~/logs/run.log").map(\.size), [5], shellPath)
+            XCTAssertEqual(try host.file(at: "~/logs/run.log")?.size, 5, shellPath)
+            XCTAssertEqual(try host.read("~/logs/run.log", range: 0..<3), Data("123".utf8), shellPath)
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: "pwned"))
+    }
+
+    func testAFileThatCannotBeDescribedIsNotTakenForNoFile() throws {
+        try write("out/a.md")
+        // The wrong kind of `stat` for this machine: it is there, and does not understand what it is asked.
+        var facts = try RemoteHost.probe(shell("/bin/sh"))
+        facts.system = "Linux"
+        let host = RemoteHost(name: "studio", shell: shell("/bin/sh"), facts: facts)
+
+        XCTAssertThrowsError(try host.files(matching: "\(root.path)/out/*.md")) { error in
+            XCTAssertEqual((error as? HostAccessError)?.message, "\(root.path)/out/*.md could not be looked at: studio could not describe a file it matches")
+        }
+        XCTAssertThrowsError(try host.file(at: "\(root.path)/out/a.md")) { error in
+            XCTAssertEqual((error as? HostAccessError)?.message, "\(root.path)/out/a.md could not be looked at: studio could not describe the file")
+        }
+        XCTAssertEqual(try host.files(matching: "\(root.path)/out/*.txt"), [])
+    }
+
+    func testARelativePathCannotBeReadAsAnOption() throws {
+        XCTAssertEqual(RemoteHost.anchored("-f"), "./-f")
+        XCTAssertEqual(RemoteHost.anchored("logs/x"), "./logs/x")
+        XCTAssertEqual(RemoteHost.anchored("./x"), "./x")
+        XCTAssertEqual(RemoteHost.anchored("/var/log/x"), "/var/log/x")
+        try inEveryShell { host in
+            XCTAssertEqual(host.contents(ofFileAt: "-f"), .missing)
+            XCTAssertEqual(try host.read("-n", range: 0..<5), Data())
+            XCTAssertNil(try host.file(at: "-e"))
+            XCTAssertEqual(host.plistNames(in: "-P"), [])
         }
     }
 

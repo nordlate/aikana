@@ -21,8 +21,9 @@ enum RemoteCommands {
 
         var command: String {
             switch self {
-            case .bsd: "stat -L -f '%m %z %i'"
-            case .gnu: "stat -L -c '%Y %s %i'"
+            // By its full path: a `stat` of another kind earlier on the user's path would not understand this.
+            case .bsd: "/usr/bin/stat -L -f '%m %z %i'"
+            case .gnu: "/usr/bin/stat -L -c '%Y %s %i'"
             }
         }
     }
@@ -37,8 +38,9 @@ enum RemoteCommands {
         ShellQuoting.quote(value)
     }
 
+    /// Reports a status. It starts a new line first, so that it is found whatever was written before it.
     private static func report(_ status: String) -> String {
-        "printf '\(RemoteShell.marker)%s\\n' \(q(status)) >&2"
+        "printf '\\n\(RemoteShell.marker)%s\\n' \(q(status)) >&2"
     }
 
     /// What the machine is: its system, the user's id and home folder, its clock, when it started and woke,
@@ -64,26 +66,32 @@ enum RemoteCommands {
     }
 
     /// The regular files a pattern matches, each as "modified size identity path" followed by a NUL.
-    /// Reports `toomany` when there are more than `limit`.
-    static func files(matching pattern: String, folders: [Folder], limit: Int, stat: StatFlavour) -> String {
-        """
-        p=\(q(pattern))
-        IFS=
-        set -- $p
-        n=0
-        for f in "$@"; do
-          [ -f "$f" ] || continue
-          n=$((n+1))
-          if [ "$n" -gt \(limit) ]; then \(report("toomany")); exit 0; fi
-          s=$(\(stat.command) "$f" 2>/dev/null) || continue
-          printf '%s %s\\0' "$s" "$f"
-        done
-        if [ "$n" -eq 0 ]; then
-        :
-        \(refuseUnsearchable(folders))
-        fi
-        \(report("ok"))
-        """
+    /// Reports `toomany` when there are more than `limit`, and `statfailed` when a file is there but cannot
+    /// be described.
+    ///
+    /// - Parameter base: A folder to match in, when the pattern is relative to it. Its name is then never
+    ///   read as part of the pattern, whatever characters it has.
+    static func files(matching pattern: String, in base: String?, folders: [Folder], limit: Int, stat: StatFlavour) -> String {
+        let enter = base.map { "cd \(q($0)) 2>/dev/null || { \(report("unsearchable")); exit 0; }" } ?? ":"
+        return """
+            \(enter)
+            p=\(q(pattern))
+            IFS=
+            set -- $p
+            n=0
+            for f in "$@"; do
+              [ -f "$f" ] || continue
+              n=$((n+1))
+              if [ "$n" -gt \(limit) ]; then \(report("toomany")); exit 0; fi
+              s=$(\(stat.command) "$f" 2>/dev/null) || { [ -f "$f" ] && { \(report("statfailed")); exit 0; }; continue; }
+              printf '%s %s\\0' "$s" "$f"
+            done
+            if [ "$n" -eq 0 ]; then
+            :
+            \(refuseUnsearchable(folders))
+            fi
+            \(report("ok"))
+            """
     }
 
     /// The regular file at exactly this path, in the same form as ``files(matching:folders:limit:stat:)``,
@@ -92,7 +100,8 @@ enum RemoteCommands {
         """
         f=\(q(path))
         if [ -f "$f" ]; then
-          s=$(\(stat.command) "$f" 2>/dev/null) && printf '%s %s\\0' "$s" "$f"
+          s=$(\(stat.command) "$f" 2>/dev/null) || { \(report("statfailed")); exit 0; }
+          printf '%s %s\\0' "$s" "$f"
         elif [ ! -e "$f" ]; then
         :
         \(refuseUnsearchable(folders))
@@ -136,7 +145,7 @@ enum RemoteCommands {
         return """
             if [ ! -x \(program) ] || [ -d \(program) ]; then \(report("notfound")); exit 0; fi
             \(arguments.map(q).joined(separator: " ")) </dev/null
-            printf '\(RemoteShell.marker)exit %s\\n' "$?" >&2
+            printf '\\n\(RemoteShell.marker)exit %s\\n' "$?" >&2
             """
     }
 }

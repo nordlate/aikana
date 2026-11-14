@@ -23,6 +23,13 @@ final class RemoteHostRunTests: RemoteHostTestCase {
         }
     }
 
+    func testErrorOutputThatDoesNotEndWithALineBreakDoesNotHideTheExitCode() throws {
+        try inEveryShell { host in
+            let result = try host.run(["/bin/sh", "-c", "printf warn >&2; exit 1"], timeout: 5)
+            XCTAssertEqual(result, CommandResult(exitCode: 1, errorOutput: "warn"))
+        }
+    }
+
     func testACommandDoesNotReadTheScriptItCameWith() throws {
         try inEveryShell { host in
             // `cat` would swallow the rest of the script, and the report with it, if it were given the input.

@@ -128,12 +128,24 @@ struct EvaluationPass {
         return evidence.hostProblem.map { finishUnreadable($0) }
     }
 
-    /// The machine answers again. For one that is allowed to be off, nothing that was due while it could not
-    /// be reached is held against the job: the watch starts over. A run that was already missed before the
-    /// machine went away stays missed; being switched off afterwards does not make up for it.
+    /// The machine answers again. For one that is allowed to be off, what was due while it could not be
+    /// reached is not held against the job, and nothing else is forgiven: a scheduled time that was already
+    /// open before the machine went away stays open, so a machine that drops out for a moment cannot hide a
+    /// job that never runs.
     mutating func comeBackOnline(offlineSince: Date) {
-        guard evidence.hostMayBeOffline, record.stateBeforeUnreadable != .missed else { return }
-        startWatchOver()
+        guard evidence.hostMayBeOffline else { return }
+        guard let timetable = record.timetable else {
+            startWatchOver()
+            return
+        }
+        if timetable.calendarRules.isEmpty {
+            // On an interval, the time away does not count: the stretch a run is due in starts that much later.
+            let away = now.timeIntervalSince(offlineSince)
+            record.intervalFrom = min((record.intervalFrom ?? record.watchingSince).addingTimeInterval(away), now)
+        } else if openRun(timetable).map({ $0 >= offlineSince }) ?? true {
+            // Everything that is open was due while the machine was away.
+            startWatchOver()
+        }
     }
 
     /// From now on is all that is judged: what was open or counted before no longer applies.

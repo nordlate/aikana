@@ -61,6 +61,8 @@ final class RemoteShellTests: RemoteHostTestCase {
             "-T",
             "-o", "BatchMode=yes",
             "-o", "ConnectTimeout=10",
+            "-o", "ServerAliveInterval=5",
+            "-o", "ServerAliveCountMax=2",
             "-o", "ControlMaster=auto",
             "-o", "ControlPath=/Users/example/Library/Caches/Ajoissa/cm/%C",
             "-o", "ControlPersist=600",
@@ -70,23 +72,33 @@ final class RemoteShellTests: RemoteHostTestCase {
 
     func testAControlFolderTooLongForASocketIsLeftOut() {
         let long = URL(fileURLWithPath: "/Users/" + String(repeating: "x", count: 60) + "/cm")
-        XCTAssertEqual(RemoteShell.sshArguments(alias: "tower", controlDirectory: long), [
-            "-T", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "--", "tower", "/bin/sh"
-        ])
+        XCTAssertEqual(RemoteShell.sshArguments(alias: "tower", controlDirectory: long), Self.plainArguments)
         XCTAssertEqual(RemoteShell.sshArguments(alias: "tower", controlDirectory: nil).suffix(3), ["--", "tower", "/bin/sh"])
     }
 
+    private static let plainArguments = [
+        "-T", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "-o", "ServerAliveInterval=5", "-o", "ServerAliveCountMax=2",
+        "--", "tower", "/bin/sh"
+    ]
+
+    func testAControlFolderSSHWouldMisreadIsLeftOut() {
+        for path in ["/Users/first last/cm", "/Users/100%/cm", "/Users/o'brien/cm", "/Users/a\"b/cm", "/Users/back\\slash/cm"] {
+            XCTAssertEqual(RemoteShell.sshArguments(alias: "tower", controlDirectory: URL(fileURLWithPath: path)), Self.plainArguments, path)
+        }
+    }
+
     func testTheScriptGoesToSSHOnItsInputAndNeverOnItsCommandLine() throws {
-        let runner = RecordingRunner(answer: CommandResult(exitCode: 0, output: "out", errorOutput: "ajoissa:ok\n"))
+        let runner = RecordingRunner(answer: CommandResult(exitCode: 0, output: "ajoissa:begin\nout", errorOutput: "\najoissa:ok\n"))
         let shell = RemoteShell.ssh(alias: "tower", runner: runner, controlDirectory: nil)
 
         let reply = try shell.run("echo 'a value'", timeout: 20)
 
         XCTAssertEqual(reply, RemoteShell.Reply(output: Data("out".utf8), errorOutput: "", status: "ok"))
         XCTAssertEqual(runner.executable, "/usr/bin/ssh")
-        XCTAssertEqual(runner.arguments, ["-T", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "--", "tower", "/bin/sh"])
-        XCTAssertEqual(runner.input, "LC_ALL=C\nexport LC_ALL\necho 'a value'\n")
+        XCTAssertEqual(runner.arguments, Self.plainArguments)
+        XCTAssertEqual(runner.input, "printf 'ajoissa:begin\\n'\nLC_ALL=C\nexport LC_ALL\necho 'a value'\n")
         XCTAssertEqual(runner.timeout, 30)
+        XCTAssertEqual(RemoteHost.readTimeout, 15)
     }
 
     // MARK: - Answers
@@ -94,6 +106,51 @@ final class RemoteShellTests: RemoteHostTestCase {
     func testWhatTheScriptWroteBeforeItsReportIsKept() throws {
         let reply = try shell("/bin/sh").run("echo out; echo warning >&2; printf 'ajoissa:exit 3\\n' >&2", timeout: 5)
         XCTAssertEqual(reply, RemoteShell.Reply(output: Data("out\n".utf8), errorOutput: "warning", status: "exit 3"))
+    }
+
+    func testWhatTheUsersShellWritesBeforeTheScriptStartsIsDropped() throws {
+        // As a line in the remote user's startup files would: written before /bin/sh reads the script.
+        let noisy = RemoteShell(runner: ProcessCommandRunner(), executable: "/bin/sh", arguments: ["-c", "echo 'Welcome to studio'; echo 'motd' >&2; exec /bin/sh"])
+
+        XCTAssertEqual(try noisy.run("printf 'payload'; printf '\\najoissa:ok\\n' >&2", timeout: 5).output, Data("payload".utf8))
+        XCTAssertEqual(try RemoteHost.probe(noisy).userID, getuid())
+    }
+
+    func testOutputWithoutAStartIsNotUsed() {
+        let runner = RecordingRunner(answer: CommandResult(exitCode: 0, output: "something", errorOutput: "ajoissa:ok\n"))
+        XCTAssertThrowsError(try RemoteShell(runner: runner, executable: "/bin/sh", arguments: []).run("true", timeout: 5)) { error in
+            XCTAssertEqual(error as? RemoteShellError, .broken("the script did not start"))
+        }
+    }
+
+    // MARK: - A machine that stops answering during a look
+
+    func testAfterAMachineStopsAnsweringTheRestOfTheLookDoesNotWaitForIt() {
+        let runner = CountingRunner(.success(CommandResult(exitCode: 255, errorOutput: "ssh: connect to host tower port 22: Operation timed out\n")))
+        let shell = RemoteShell.ssh(alias: "tower", runner: runner, controlDirectory: nil).forOneLook()
+
+        for _ in 1...3 {
+            XCTAssertThrowsError(try shell.run("true", timeout: 5)) { error in
+                XCTAssertEqual(error as? RemoteShellError, .unreachable("ssh: connect to host tower port 22: Operation timed out"))
+            }
+        }
+        XCTAssertEqual(runner.count, 1)
+        // The next look tries again.
+        XCTAssertThrowsError(try RemoteShell.ssh(alias: "tower", runner: runner, controlDirectory: nil).forOneLook().run("true", timeout: 5))
+        XCTAssertEqual(runner.count, 2)
+    }
+
+    func testAScriptThatTimesOutEndsTheLookForItsMachineUnlessItRanTheUsersProgram() {
+        let runner = CountingRunner(.failure(.timedOut(after: 15)))
+        let shell = RemoteShell(runner: runner, executable: "/bin/sh", arguments: []).forOneLook()
+
+        XCTAssertThrowsError(try shell.run("sleep 60", timeout: 5, mayHang: true))
+        XCTAssertThrowsError(try shell.run("sleep 60", timeout: 5, mayHang: true))
+        XCTAssertEqual(runner.count, 2)
+
+        XCTAssertThrowsError(try shell.run("true", timeout: 5))
+        XCTAssertThrowsError(try shell.run("true", timeout: 5))
+        XCTAssertEqual(runner.count, 3)
     }
 
     func testAConnectionThatFailsIsUnreachableWithWhatSSHSaid() {
@@ -189,6 +246,24 @@ final class RemoteShellTests: RemoteHostTestCase {
         for output in ["", "Darwin\n501\n", "Darwin\nroot\n/Users/example\n1\n\n\n\n", "Darwin\n501\nhome\n1\n\n\n\n", "\n501\n/h\n1\n\n\n\n", "Welcome!\nDarwin\n501\n/h\nx\n\n\n"] {
             XCTAssertNil(RemoteFacts(probeOutput: output), output)
         }
+    }
+}
+
+/// Stands in for `ssh`: gives one answer and counts how often it was asked.
+final class CountingRunner: CommandRunner, @unchecked Sendable {
+    private let lock = NSLock()
+    private let result: Result<CommandResult, CommandError>
+    private var calls = 0
+
+    init(_ result: Result<CommandResult, CommandError>) {
+        self.result = result
+    }
+
+    var count: Int { lock.withLock { calls } }
+
+    func run(_ executable: String, arguments: [String], input: Data?, timeout: TimeInterval) throws(CommandError) -> CommandResult {
+        lock.withLock { calls += 1 }
+        return try result.get()
     }
 }
 

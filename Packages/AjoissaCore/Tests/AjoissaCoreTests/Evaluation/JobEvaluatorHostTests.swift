@@ -108,10 +108,50 @@ final class JobEvaluatorHostTests: XCTestCase {
         job.evaluate(at: "2026-11-14 10:30", loaded(runs: 6, mayBeOffline: true, timetable: hourly))
         job.evaluate(at: "2026-11-14 11:00", offline(mayBeOffline: true))
 
-        // Off for most of a day: no runs, and none expected.
-        XCTAssertEqual(job.evaluate(at: "2026-11-15 08:00", loaded(runs: 6, mayBeOffline: true, timetable: hourly)).state, .waiting)
-        XCTAssertEqual(job.evaluate(at: "2026-11-15 09:20", loaded(runs: 6, mayBeOffline: true, timetable: hourly)).state, .waiting)
-        XCTAssertEqual(job.evaluate(at: "2026-11-15 09:31", loaded(runs: 6, mayBeOffline: true, timetable: hourly)).state, .missed)
+        // Off for 21 hours: no runs, and none expected. The hour the last run started is counted on from
+        // where it was left: 30 minutes of it were used before the machine went away.
+        XCTAssertEqual(job.evaluate(at: "2026-11-15 08:00", loaded(runs: 6, mayBeOffline: true, timetable: hourly)).state, .ok)
+        XCTAssertEqual(job.evaluate(at: "2026-11-15 08:59", loaded(runs: 6, mayBeOffline: true, timetable: hourly)).state, .ok)
+        XCTAssertEqual(job.evaluate(at: "2026-11-15 09:01", loaded(runs: 6, mayBeOffline: true, timetable: hourly)).state, .missed)
+    }
+
+    func testAMachineThatDropsOutForAMomentEachDayDoesNotHideAJobThatNeverRuns() {
+        let job = Scenario.watchedSinceYesterday()
+        var states: [JobState] = []
+        for day in 14...20 {
+            job.evaluate(at: "2026-11-\(day) 02:10", loaded(runs: 3, mayBeOffline: true))
+            job.evaluate(at: "2026-11-\(day) 02:20", offline(mayBeOffline: true))
+            job.evaluate(at: "2026-11-\(day) 02:21", loaded(runs: 3, mayBeOffline: true))
+            states.append(job.evaluate(at: "2026-11-\(day) 03:00", loaded(runs: 3, mayBeOffline: true)).state)
+        }
+        XCTAssertEqual(states, Array(repeating: .missed, count: 7))
+        // Once missed, it is never called fine or waiting again.
+        XCTAssertEqual(Set(job.record?.transitions.dropFirst().map(\.state) ?? []), [.hostOffline, .missed])
+    }
+
+    func testAMachineThatDropsOutNowAndThenDoesNotHideAnIntervalJobThatNeverRuns() {
+        let hourly = Timetable(interval: 3600)
+        let job = Scenario()
+        var clock = TestClock.date("2026-11-14 10:00")
+        var states: [JobState] = []
+        for look in 0..<60 {
+            let evidence = look % 4 == 3 ? offline(mayBeOffline: true) : loaded(runs: 5, mayBeOffline: true, timetable: hourly)
+            states.append(job.evaluate(at: clock, evidence).state)
+            clock = clock.addingTimeInterval(20 * 60)
+        }
+        // Each time away gives the job that much longer, and no more: it is missed in the end, and stays so.
+        let firstMissed = states.firstIndex(of: .missed)
+        XCTAssertNotNil(firstMissed)
+        XCTAssertLessThan(firstMissed ?? 60, 12)
+        XCTAssertEqual(Set(states.suffix(from: firstMissed ?? 0)), [.missed, .hostOffline])
+    }
+
+    func testARunStillWaitedForWhenTheMachineWentAwayIsJudgedWhenItIsBack() {
+        let job = Scenario.watchedSinceYesterday()
+        XCTAssertEqual(job.evaluate(at: "2026-11-14 02:05", loaded(runs: 3, mayBeOffline: true)).state, .waiting)
+        job.evaluate(at: "2026-11-14 02:06", offline(mayBeOffline: true))
+
+        XCTAssertEqual(job.evaluate(at: "2026-11-14 09:00", loaded(runs: 3, mayBeOffline: true)).state, .missed)
     }
 
     func testAFailedRunIsStillReportedAfterTheMachineIsBack() {

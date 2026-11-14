@@ -56,12 +56,13 @@ The app uses the same config and history files as `ajoissa status`, and honours 
 A host in the config names an alias from your own `~/.ssh/config`. Ajoissa runs the system `ssh` with that alias and stores no addresses, keys or passwords; whatever your SSH config and agent do for `ssh <alias>` in a terminal, they do here.
 
 - **No questions are asked.** The connection must work without typing anything: a key in the agent or without a passphrase, and a host key that is already known. Connect once by hand first. A connection that would need a prompt counts as unreachable.
-- **`host offline` is its own state.** A machine that does not answer within 10 seconds is offline, its jobs are neither judged nor checked, and the reason `ssh` gave is shown. It needs attention unless the host has `mayBeOffline: true`.
-- **A machine that may be offline** is shown as offline without turning the icon. When it is back, scheduled times that passed while it could not be reached are not held against its jobs. A run that was already missed before it went away stays missed.
+- **`host offline` is its own state.** A machine that cannot be connected to within 10 seconds, or does not answer the first question within another 15, is offline. Its jobs are neither judged nor checked, and the reason `ssh` gave is shown. It needs attention unless the host has `mayBeOffline: true`.
+- **A machine that may be offline** is shown as offline without turning the icon. When it is back, scheduled times that passed while it could not be reached are not held against its jobs, and for a job on an interval the time away does not count. Nothing else is forgiven: a run that was already due before the machine went away is still expected.
 - **A machine that should be on** gets no such allowance: if it was unreachable over a scheduled time and the run did not happen, the run is missed.
 - **Times are the machine's own.** A job's schedule is read in the time zone of the machine it runs on. A machine whose clock differs from this Mac's by more than two minutes is not judged; its jobs are `unknown` and say so.
 - **One connection per machine** is kept open for ten minutes after its last use, through a socket in `~/Library/Caches/Ajoissa/cm`, so a look does not connect once per job.
-- **Machines are looked at side by side**, so one that does not answer delays only its own jobs.
+- **Machines are looked at side by side.** One that stops answering part of the way through a look is waited for once, for at most 25 seconds; after that the rest of its jobs are `unknown` for that look without further waiting. A look is finished when the slowest machine has answered or been given up on.
+- **What the remote user's shell prints at login** (a banner, a line from a startup file) is ignored.
 
 ## What Ajoissa runs and reads
 
@@ -81,22 +82,24 @@ Beyond that it runs only what you tell it to: the program of each `command` chec
 For a host reached over SSH, Ajoissa runs exactly this, with nothing from your config on the command line:
 
 ```sh
-/usr/bin/ssh -T -o BatchMode=yes -o ConnectTimeout=10 -o ControlMaster=auto -o ControlPath=<socket> -o ControlPersist=600 -- <alias> /bin/sh
+/usr/bin/ssh -T -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 -o ControlMaster=auto -o ControlPath=<socket> -o ControlPersist=600 -- <alias> /bin/sh
 ```
+
+The three `Control` options are left out when the path of your home folder is too long for a socket or has a space, `%`, quote or backslash in it; every script then makes its own connection.
 
 What the remote `/bin/sh` does is a short script sent on its input. There are seven scripts, all in [`RemoteCommands.swift`](Packages/AjoissaCore/Sources/AjoissaCore/Remote/RemoteCommands.swift), and no others. Paths, patterns and arguments from your config appear in them only as single-quoted words, which a POSIX shell reads as plain text.
 
 | Script | What it runs on the machine | Why |
 |---|---|---|
 | Probe | `uname -s`, `id -u`, `date +%s`, `sysctl -n kern.boottime kern.waketime`, `readlink /etc/localtime`, and prints `$HOME` | What kind of machine it is, its clock, when it started and woke, its time zone. Sent first in every look. |
-| Files by pattern | The shell's own pattern matching, `[ -f ]`, `stat` | Name, size, modification time and identity of the files a `file-age` or `file-size` path matches. Never their contents. |
-| One file | `[ -f ]`, `stat` | The same for one path: a job's log file. |
-| Read | `tail -c`, `head -c` | The part of a log a run wrote, for a `log-pattern` check; the end of a log to show in the app; a launchd plist. |
-| List plists | `cd`, the shell's pattern matching | The names of the `.plist` files in the three launchd folders, when a job's plist is not named after its label. |
+| Files by pattern | `cd` into the home folder for a `~/` path, the shell's own pattern matching, `[ -f ]`, `[ -d ]`, `[ -x ]`, `[ -r ]`, `/usr/bin/stat` | Name, size, modification time and identity of the files a `file-age` or `file-size` path matches. Never their contents. |
+| One file | `[ -f ]`, `[ -e ]`, `[ -d ]`, `[ -x ]`, `[ -r ]`, `/usr/bin/stat` | The same for one path: a job's log file. |
+| Read | `[ -e ]`, `[ -f ]`, `[ -r ]`, `tail -c`, `head -c` | The part of a log a run wrote, for a `log-pattern` check; the end of a log to show in the app; a launchd plist. |
+| List plists | `[ -d ]`, `[ -r ]`, `[ -x ]`, `cd`, the shell's pattern matching, `[ -e ]` | The names of the `.plist` files in the three launchd folders, when a job's plist is not named after its label. |
 | launchctl | `/bin/launchctl print gui/<user id>/<label>` or `system/<label>` | The state of a launchd job, as on this Mac. |
-| Command check | The program of a `command` check with its arguments, reading nothing | Only what you wrote in the config. |
+| Command check | `[ -x ]` and `[ -d ]` on the program, then the program of a `command` check with its arguments, reading nothing | Only what you wrote in the config. |
 
-All of them only read, except a `command` check, which does whatever your program does.
+Every script also uses the shell's own `printf` to write its answer, and sets `LC_ALL=C` for itself. All of them only read, except a `command` check, which does whatever your program does.
 
 ```sh
 cd Packages/AjoissaCore
@@ -157,6 +160,8 @@ A job can exit with code 0 and still have produced nothing. Checks say what a su
 - **File times on other machines** are read to the second.
 - **Links on other machines** are not resolved when a job's plist is compared with the file launchd loaded it from; the file launchd names is then read once more.
 - **A machine's time zone** is read from where `/etc/localtime` points. If that cannot be read, this Mac's zone is used.
+- **A machine that may be offline and sleeps through a job's time every day** never has that job reported missed. That is what the setting means; leave it off for a machine whose jobs you want to hear about.
+- **`stat` is run as `/usr/bin/stat`** on other machines. Where it is somewhere else, file checks cannot be carried out.
 - **Linux:** checks work on a Linux host, but when it last started or woke is not read yet, and neither are systemd and cron.
 - **A file or argument with a line break in it** cannot be used on another machine.
 - **The app and `ajoissa status` at the same moment.** Both read the history, look, and write it back. If the two overlap, what the one that finishes first saw is overwritten. It is seen again at the next look.
