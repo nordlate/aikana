@@ -109,6 +109,33 @@ final class WatchModelTests: WatchModelTestCase {
         XCTAssertEqual(model.reports.map(\.id), ["a"])
     }
 
+    func testALogIsReadOnTheMachineItsJobRunsOn() async {
+        let model = model(rounds: Rounds([looked(report("a", .ok))]))
+        await model.refresh()
+
+        let log = await model.logText(at: "/var/log/a.log", ofJobWithID: "a")
+        let none = await model.logText(at: "/var/log/a.log", ofJobWithID: "gone")
+
+        XCTAssertEqual(log, .text("local:/var/log/a.log"))
+        XCTAssertEqual(none, .missing)
+        XCTAssertTrue(model.isLocal(jobWithID: "a"))
+        XCTAssertFalse(model.isLocal(jobWithID: "gone"))
+    }
+
+    func testAMachineThatMayBeOfflineDoesNotNeedAttention() async {
+        var expected = report("a", .hostOffline)
+        expected.hostMayBeOffline = true
+        let model = model(rounds: Rounds([looked(expected, report("b", .ok)), looked(report("a", .hostOffline))]))
+
+        await model.refresh()
+        XCTAssertEqual(model.headline, "Everything is fine")
+        XCTAssertEqual(model.menuBarSymbolName, "clock.badge.checkmark")
+
+        await model.refresh()
+        XCTAssertEqual(model.headline, "1 needs attention")
+        XCTAssertEqual(model.menuBarSymbolName, "clock.badge.exclamationmark")
+    }
+
     // MARK: - When it looks
 
     func testAnUnchangedConfigFileDoesNotCauseALook() async {

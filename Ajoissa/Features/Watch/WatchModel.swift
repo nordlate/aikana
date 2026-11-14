@@ -31,7 +31,8 @@ final class WatchModel {
         var round: @Sendable (Date) async -> WatchSession.Outcome
         /// Something that changes whenever the config file does.
         var configFingerprint: @Sendable () -> String
-        var readLog: @Sendable (String) async -> LogText
+        /// The end of a log file on a machine.
+        var readLog: @Sendable (String, WatchedHost) async -> LogText
         /// Shows one notification.
         var deliver: @Sendable (Announcement) async -> Void
         /// Asks whether notifications may be shown; `false` when the user has said no.
@@ -154,8 +155,20 @@ final class WatchModel {
         ]
     }
 
-    func logText(at path: String) async -> LogText {
-        await environment.readLog(path)
+    /// The end of a log of the job with this id, read on the machine the job runs on.
+    func logText(at path: String, ofJobWithID id: String) async -> LogText {
+        guard let host = host(ofJobWithID: id) else { return .missing }
+        return await environment.readLog(path, host)
+    }
+
+    /// Whether the job runs on this Mac, so that its files can be opened here.
+    func isLocal(jobWithID id: String) -> Bool {
+        host(ofJobWithID: id)?.connection == .local
+    }
+
+    private func host(ofJobWithID id: String) -> WatchedHost? {
+        guard case let .jobs(groups) = content else { return nil }
+        return groups.first { $0.reports.contains { $0.id == id } }?.host
     }
 
     private func apply(_ outcome: WatchSession.Outcome) {
@@ -280,7 +293,7 @@ final class WatchModel {
                 return "No jobs configured"
             }
             let failed = reports.count { $0.state == .failed }
-            let attention = reports.count { [.missed, .stale, .hostOffline].contains($0.state) }
+            let attention = reports.count(where: \.needsAttention)
             var parts: [String] = []
             if failed > 0 {
                 parts.append("\(failed) failed")

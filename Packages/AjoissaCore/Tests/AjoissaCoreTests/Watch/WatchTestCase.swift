@@ -7,7 +7,7 @@ class WatchTestCase: XCTestCase {
     var agents: URL!
     var runner: FakeCommandRunner!
     var host: FakeHost!
-    var watch: LocalWatch!
+    var watch: JobWatch!
     let calendar = TestClock.utc
 
     override func setUpWithError() throws {
@@ -16,11 +16,11 @@ class WatchTestCase: XCTestCase {
         try FileManager.default.createDirectory(at: agents, withIntermediateDirectories: true)
         runner = FakeCommandRunner()
         host = FakeHost()
-        watch = LocalWatch(
+        watch = JobWatch(
             collector: LaunchdCollector(runner: runner, locations: [LaunchdSearchLocation(directory: agents, domain: .user(id: 501))]),
             host: host,
-            uptime: { LocalWatch.Uptime(awakeSince: nil, bootedAt: nil) },
-            logModified: { _ in nil }
+            uptime: { JobWatch.Uptime(awakeSince: nil, bootedAt: nil) },
+            remoteShell: { _ in RemoteShell(runner: ProcessCommandRunner(), executable: "/usr/bin/false", arguments: []) }
         )
     }
 

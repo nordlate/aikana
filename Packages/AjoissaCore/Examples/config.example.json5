@@ -9,9 +9,11 @@
   // Machines other than this Mac. "local" always exists and means the Mac Ajoissa runs on.
   hosts: [
     // "ssh" is a host alias from your ~/.ssh/config. Ajoissa stores no addresses or keys.
+    // "ssh studio-mac" must work in a terminal without asking for anything.
     { id: "studio", ssh: "studio-mac" },
 
-    // A machine that is allowed to be switched off. Being unreachable is then not reported as a problem.
+    // A machine that is allowed to be switched off. Being unreachable is then not reported as a problem,
+    // and what was due while it was away is not counted as missed.
     { id: "tower", ssh: "tower", mayBeOffline: true },
   ],
 

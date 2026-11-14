@@ -77,7 +77,11 @@ func status(_ arguments: [String]) throws(Stop) {
     let session = WatchSession(
         configURL: url,
         historyFile: HistoryFile(environment: ProcessInfo.processInfo.environment, homeDirectory: home),
-        watch: LocalWatch(homeDirectory: home, userID: getuid())
+        watch: JobWatch(
+            homeDirectory: home,
+            userID: getuid(),
+            controlDirectory: home.appending(path: JobWatch.defaultControlDirectory)
+        )
     )
     switch session.round(now: Date(), calendar: .current) {
     case let .configProblem(error):
@@ -101,6 +105,9 @@ func status(_ arguments: [String]) throws(Stop) {
 func show(_ report: JobReport) {
     let job = report.job
     print(job.name == job.id ? job.id : "\(job.id) (\(job.name))")
+    if job.hostID != Host.localID {
+        print("  host:     \(job.hostID)")
+    }
     if let source = report.source, let status = report.sourceStatus {
         let (scheduler, name) = source.split(separator: " ", maxSplits: 1).map(String.init).pair
         print("  \(scheduler):".padding(toLength: 12, withPad: " ", startingAt: 0) + name)

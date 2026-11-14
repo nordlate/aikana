@@ -3,12 +3,23 @@ import Foundation
 /// What a finished command left behind.
 public struct CommandResult: Sendable, Equatable {
     public let exitCode: Int32
-    public let output: String
+    /// What the command wrote to its standard output, byte for byte.
+    public let outputData: Data
     public let errorOutput: String
 
+    /// The standard output as text. Bytes that are not valid text become replacement characters.
+    public var output: String {
+        // swiftlint:disable:next optional_data_string_conversion
+        String(decoding: outputData, as: UTF8.self)
+    }
+
     public init(exitCode: Int32, output: String = "", errorOutput: String = "") {
+        self.init(exitCode: exitCode, outputData: Data(output.utf8), errorOutput: errorOutput)
+    }
+
+    public init(exitCode: Int32, outputData: Data, errorOutput: String = "") {
         self.exitCode = exitCode
-        self.output = output
+        self.outputData = outputData
         self.errorOutput = errorOutput
     }
 }
@@ -25,8 +36,16 @@ public protocol CommandRunner: Sendable {
     /// - Parameters:
     ///   - executable: Absolute path of the program.
     ///   - arguments: Passed as they are. No shell is involved.
+    ///   - input: What the program reads from its standard input. `nil` for nothing.
     ///   - timeout: Seconds after which the program is stopped.
-    func run(_ executable: String, arguments: [String], timeout: TimeInterval) throws(CommandError) -> CommandResult
+    func run(_ executable: String, arguments: [String], input: Data?, timeout: TimeInterval) throws(CommandError) -> CommandResult
+}
+
+extension CommandRunner {
+    /// Runs a program that reads nothing from its standard input.
+    public func run(_ executable: String, arguments: [String], timeout: TimeInterval) throws(CommandError) -> CommandResult {
+        try run(executable, arguments: arguments, input: nil, timeout: timeout)
+    }
 }
 
 /// Runs programs on this Mac.
@@ -36,13 +55,14 @@ public struct ProcessCommandRunner: CommandRunner {
 
     public init() {}
 
-    public func run(_ executable: String, arguments: [String], timeout: TimeInterval) throws(CommandError) -> CommandResult {
+    public func run(_ executable: String, arguments: [String], input: Data?, timeout: TimeInterval) throws(CommandError) -> CommandResult {
         let process = Process()
         let output = Pipe()
         let errorOutput = Pipe()
+        let inputPipe = input.map { _ in Pipe() }
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = arguments
-        process.standardInput = FileHandle.nullDevice
+        process.standardInput = inputPipe ?? FileHandle.nullDevice
         process.standardOutput = output
         process.standardError = errorOutput
 
@@ -52,6 +72,9 @@ public struct ProcessCommandRunner: CommandRunner {
             try process.run()
         } catch {
             throw .notStarted(reason: error.localizedDescription)
+        }
+        if let input, let inputPipe {
+            Self.feed(input, to: inputPipe.fileHandleForWriting)
         }
 
         // Both streams are read as the program writes; a program that fills a pipe nobody reads would hang.
@@ -78,15 +101,26 @@ public struct ProcessCommandRunner: CommandRunner {
         let endedBySignal = process.terminationReason == .uncaughtSignal
         return CommandResult(
             exitCode: endedBySignal ? 128 + process.terminationStatus : process.terminationStatus,
-            output: collectedOutput.text,
+            outputData: collectedOutput.data,
             errorOutput: collectedErrorOutput.text
         )
+    }
+
+    /// Writes the input on a background queue and closes the stream, so a program that does not read it, or
+    /// reads it slowly, cannot hold up the caller.
+    private static func feed(_ input: Data, to handle: FileHandle) {
+        // A program that ends without reading must not end this one with a broken pipe signal.
+        _ = fcntl(handle.fileDescriptor, F_SETNOSIGPIPE, 1)
+        DispatchQueue.global(qos: .utility).async {
+            try? handle.write(contentsOf: input)
+            try? handle.close()
+        }
     }
 
     /// Everything a stream has delivered so far, gathered on a background queue as it arrives.
     private final class Collected: @unchecked Sendable {
         private let lock = NSLock()
-        private var data = Data()
+        private var collected = Data()
         private let ended = DispatchSemaphore(value: 0)
         private let handle: FileHandle
 
@@ -99,7 +133,7 @@ public struct ProcessCommandRunner: CommandRunner {
                     handle.readabilityHandler = nil
                     self.ended.signal()
                 } else {
-                    self.lock.withLock { self.data.append(chunk) }
+                    self.lock.withLock { self.collected.append(chunk) }
                 }
             }
         }
@@ -112,11 +146,14 @@ public struct ProcessCommandRunner: CommandRunner {
             handle.readabilityHandler = nil
         }
 
+        var data: Data {
+            lock.withLock { collected }
+        }
+
         var text: String {
-            let data = lock.withLock { self.data }
             // Bytes that are not valid text become replacement characters; the rest stays readable.
             // swiftlint:disable:next optional_data_string_conversion
-            return String(decoding: data, as: UTF8.self)
+            String(decoding: data, as: UTF8.self)
         }
     }
 }

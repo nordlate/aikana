@@ -38,6 +38,18 @@ public struct JobReport: Sendable, Equatable, Identifiable {
     public var logPaths: [String]
     /// Whether the state is news since the last look.
     public var changed: Bool
+    /// Whether the job's machine is one that is allowed to be switched off or asleep.
+    public var hostMayBeOffline = false
+
+    /// Whether the job wants a look without having failed: a run is missing, it has been unreadable for
+    /// long, or its machine cannot be reached and is not one that is allowed to be off.
+    public var needsAttention: Bool {
+        switch state {
+        case .missed, .stale: true
+        case .hostOffline: !hostMayBeOffline
+        case .ok, .running, .waiting, .failed, .unknown: false
+        }
+    }
 
     public var id: String { job.id }
 
@@ -72,19 +84,21 @@ public struct JobReport: Sendable, Equatable, Identifiable {
     }
 }
 
+/// A machine jobs run on, under a name that does not clash with Foundation's `Host` where both are imported.
+public typealias WatchedHost = Host
+
 /// All jobs at a glance.
 public enum OverallStatus: Sendable, Equatable {
     case allFine
-    /// A run is missing, a job has been unreadable for long, or a machine cannot be reached.
+    /// A run is missing, a job has been unreadable for long, or a machine that should be on cannot be reached.
     case needsAttention
     /// A job ran and went wrong, or cannot run.
     case failure
 
     public init(reports: [JobReport]) {
-        let states = Set(reports.map(\.state))
-        if states.contains(.failed) {
+        if reports.contains(where: { $0.state == .failed }) {
             self = .failure
-        } else if !states.isDisjoint(with: [.missed, .stale, .hostOffline]) {
+        } else if reports.contains(where: \.needsAttention) {
             self = .needsAttention
         } else {
             self = .allFine

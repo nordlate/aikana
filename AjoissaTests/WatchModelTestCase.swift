@@ -78,7 +78,7 @@ class WatchModelTestCase: XCTestCase {
             historyURL: URL(fileURLWithPath: "/tmp/example/history.json"),
             round: { _ in await rounds.next() },
             configFingerprint: { fingerprint.value },
-            readLog: { _ in .missing },
+            readLog: { path, host in .text("\(host.id):\(path)") },
             deliver: { await told.add($0) },
             requestNotificationPermission: { true },
             readSwitch: { switches.value[$0] },

@@ -74,6 +74,8 @@ public struct JobRecord: Sendable, Equatable, Codable {
     /// When a run was seen that no scheduled time was waiting for, such as one started by hand after the
     /// scheduled run failed. Its output is then what the checks should read.
     public var extraRunSeenAt: Date?
+    /// Since when the job's machine has not been reachable without a break.
+    public var offlineSince: Date?
     /// The problem the user was last told about and that has not ended since: see ``AlertPlanner``. The
     /// evaluation carries it along and never reads it.
     public var alerted: JobState?
@@ -102,6 +104,7 @@ public struct JobRecord: Sendable, Equatable, Codable {
         extraRunSeenAt: Date? = nil,
         checkState: CheckState? = nil,
         alerted: JobState? = nil,
+        offlineSince: Date? = nil,
         state: JobState = .waiting,
         reason: String = "",
         stateSince: Date? = nil,
@@ -122,6 +125,7 @@ public struct JobRecord: Sendable, Equatable, Codable {
         self.extraRunSeenAt = extraRunSeenAt
         self.checkState = checkState
         self.alerted = alerted
+        self.offlineSince = offlineSince
         self.state = state
         self.reason = reason
         self.stateSince = stateSince ?? watchingSince
