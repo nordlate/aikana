@@ -22,10 +22,11 @@ final class JobEvaluatorHostTests: XCTestCase {
         XCTAssertEqual(away.state, .hostOffline)
         XCTAssertEqual(away.reason, "tower cannot be reached: no route to host")
         XCTAssertTrue(away.changed)
-        XCTAssertEqual(job.record?.offlineSince, TestClock.date("2026-11-13 23:30"))
+        // The machine went away some time after the last look that found it there.
+        XCTAssertEqual(job.record?.offlineSince, TestClock.date("2026-11-13 23:00"))
 
         XCTAssertFalse(job.evaluate(at: "2026-11-13 23:31", offline()).changed)
-        XCTAssertEqual(job.record?.offlineSince, TestClock.date("2026-11-13 23:30"))
+        XCTAssertEqual(job.record?.offlineSince, TestClock.date("2026-11-13 23:00"))
 
         let back = job.evaluate(at: "2026-11-13 23:40", loaded(runs: 3))
         XCTAssertEqual(back.state, .ok)
@@ -108,11 +109,84 @@ final class JobEvaluatorHostTests: XCTestCase {
         job.evaluate(at: "2026-11-14 10:30", loaded(runs: 6, mayBeOffline: true, timetable: hourly))
         job.evaluate(at: "2026-11-14 11:00", offline(mayBeOffline: true))
 
-        // Off for 21 hours: no runs, and none expected. The hour the last run started is counted on from
-        // where it was left: 30 minutes of it were used before the machine went away.
+        // Off since some time after the last look that found it there: no runs, and none expected. The job
+        // gets its full hour and grace from the moment the machine is back.
         XCTAssertEqual(job.evaluate(at: "2026-11-15 08:00", loaded(runs: 6, mayBeOffline: true, timetable: hourly)).state, .ok)
-        XCTAssertEqual(job.evaluate(at: "2026-11-15 08:59", loaded(runs: 6, mayBeOffline: true, timetable: hourly)).state, .ok)
-        XCTAssertEqual(job.evaluate(at: "2026-11-15 09:01", loaded(runs: 6, mayBeOffline: true, timetable: hourly)).state, .missed)
+        XCTAssertEqual(job.evaluate(at: "2026-11-15 09:29", loaded(runs: 6, mayBeOffline: true, timetable: hourly)).state, .ok)
+        XCTAssertEqual(job.evaluate(at: "2026-11-15 09:31", loaded(runs: 6, mayBeOffline: true, timetable: hourly)).state, .missed)
+    }
+
+    // MARK: - Looks that are far apart, and machines that say when they woke
+
+    func testAMachineThatWasOffOvernightWhileNobodyLookedIsNotMissed() {
+        // This Mac slept too: the last look that found the machine was at 23:00, the next one at 08:00.
+        let job = Scenario.watchedSinceYesterday()
+        job.evaluate(at: "2026-11-14 08:00", offline(mayBeOffline: true))
+
+        let back = job.evaluate(at: "2026-11-14 09:00", loaded(runs: 3, mayBeOffline: true, awakeSince: "2026-11-14 08:55"))
+
+        XCTAssertEqual(back.state, .waiting)
+        XCTAssertEqual(job.evaluate(at: "2026-11-14 12:00", loaded(runs: 3, mayBeOffline: true, awakeSince: "2026-11-14 08:55")).state, .waiting)
+    }
+
+    func testAnIntervalJobOnAMachineThatWasOffOvernightWhileNobodyLookedIsNotMissed() {
+        let hourly = Timetable(interval: 3600)
+        let job = Scenario()
+        job.evaluate(at: "2026-11-13 22:00", loaded(runs: 5, mayBeOffline: true, timetable: hourly))
+        job.evaluate(at: "2026-11-13 22:50", loaded(runs: 6, mayBeOffline: true, timetable: hourly))
+        job.evaluate(at: "2026-11-14 08:00", offline(mayBeOffline: true))
+
+        let woke = "2026-11-14 08:55"
+        XCTAssertEqual(job.evaluate(at: "2026-11-14 09:00", loaded(runs: 6, mayBeOffline: true, timetable: hourly, awakeSince: woke)).state, .ok)
+        XCTAssertEqual(job.evaluate(at: "2026-11-14 10:20", loaded(runs: 6, mayBeOffline: true, timetable: hourly, awakeSince: woke)).state, .ok)
+        XCTAssertEqual(job.evaluate(at: "2026-11-14 10:30", loaded(runs: 6, mayBeOffline: true, timetable: hourly, awakeSince: woke)).state, .missed)
+    }
+
+    func testAScheduledTimeThatPassedBetweenTwoLooksWhileTheMachineSleptIsNotMissed() {
+        let job = Scenario.watchedSinceYesterday()
+        job.evaluate(at: "2026-11-14 01:55", loaded(runs: 3, mayBeOffline: true))
+        job.evaluate(at: "2026-11-14 02:03", offline(mayBeOffline: true))
+
+        let back = job.evaluate(at: "2026-11-14 09:00", loaded(runs: 3, mayBeOffline: true, awakeSince: "2026-11-14 08:59"))
+        XCTAssertEqual(back.state, .waiting)
+        // The run launchd makes up for on wake is then simply a run, and nothing was ever missed.
+        XCTAssertEqual(job.evaluate(at: "2026-11-14 09:01", loaded(runs: 4, mayBeOffline: true, awakeSince: "2026-11-14 08:59")).state, .ok)
+        XCTAssertFalse(job.record?.transitions.contains { $0.state == .missed } ?? true)
+    }
+
+    func testAMachineThatWasAwakeAndOnlyOutOfReachDoesNotHideAJobThatNeverRuns() {
+        // Out of reach from ten to until ten past, every hour, and awake all along.
+        let hourly = Timetable(calendarRules: [.init(minute: 0)])
+        let job = Scenario(grace: 15 * 60)
+        let awake = "2026-11-13 08:00"
+        job.evaluate(at: "2026-11-14 09:20", loaded(runs: 3, mayBeOffline: true, timetable: hourly, awakeSince: awake))
+        var states: [JobState] = []
+        for hour in 10...15 {
+            job.evaluate(at: "2026-11-14 \(hour - 1):45", loaded(runs: 3, mayBeOffline: true, timetable: hourly, awakeSince: awake))
+            job.evaluate(at: "2026-11-14 \(hour - 1):55", offline(mayBeOffline: true))
+            job.evaluate(at: "2026-11-14 \(hour):05", offline(mayBeOffline: true))
+            states.append(job.evaluate(at: "2026-11-14 \(hour):20", loaded(runs: 3, mayBeOffline: true, timetable: hourly, awakeSince: awake)).state)
+        }
+        XCTAssertEqual(states, Array(repeating: .missed, count: 6))
+    }
+
+    func testARunThatHappenedWhileAnAwakeMachineWasOutOfReachCounts() {
+        let job = Scenario.watchedSinceYesterday()
+        job.evaluate(at: "2026-11-14 01:50", offline(mayBeOffline: true))
+
+        let back = job.evaluate(at: "2026-11-14 02:20", loaded(runs: 4, mayBeOffline: true, awakeSince: "2026-11-13 08:00"))
+
+        XCTAssertEqual(back.state, .ok)
+        XCTAssertEqual(back.reason, "the run due at 2026-11-14 02:00 happened")
+    }
+
+    func testARunBeforeARestartThatNobodySawIsNotMissed() {
+        let job = Scenario.watchedSinceYesterday()
+        job.evaluate(at: "2026-11-14 02:30", offline(mayBeOffline: true))
+
+        var evidence = loaded(runs: 0, mayBeOffline: true, awakeSince: "2026-11-14 08:00")
+        evidence.bootedAt = TestClock.date("2026-11-14 08:00")
+        XCTAssertEqual(job.evaluate(at: "2026-11-14 08:05", evidence).state, .waiting)
     }
 
     func testAMachineThatDropsOutForAMomentEachDayDoesNotHideAJobThatNeverRuns() {
@@ -142,7 +216,7 @@ final class JobEvaluatorHostTests: XCTestCase {
         // Each time away gives the job that much longer, and no more: it is missed in the end, and stays so.
         let firstMissed = states.firstIndex(of: .missed)
         XCTAssertNotNil(firstMissed)
-        XCTAssertLessThan(firstMissed ?? 60, 12)
+        XCTAssertLessThan(firstMissed ?? 60, 30)
         XCTAssertEqual(Set(states.suffix(from: firstMissed ?? 0)), [.missed, .hostOffline])
     }
 

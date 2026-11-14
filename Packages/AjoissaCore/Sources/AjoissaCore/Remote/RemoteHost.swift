@@ -118,7 +118,7 @@ public struct RemoteHost: HostAccess, LaunchdAccess {
         let script = RemoteCommands.files(
             matching: inHome ? "./" + pattern.dropFirst(2) : expanded,
             in: inHome ? facts.home : nil,
-            folders: Self.folders(on: expanded),
+            folders: inHome ? Self.folders(on: String(pattern.dropFirst(1)), under: facts.home) : Self.folders(on: expanded),
             limit: LocalHost.matchLimit,
             stat: stat
         )
@@ -250,17 +250,23 @@ public struct RemoteHost: HostAccess, LaunchdAccess {
 
     /// The folders a path leads through before its first wildcard, outermost first. The last one must be
     /// listable when a wildcard follows it; the others only need to be entered.
-    static func folders(on path: String) -> [RemoteCommands.Folder] {
-        guard path.hasPrefix("/") else { return [] }
-        let parts = path.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
-        let isPattern: (String) -> Bool = { $0.contains { "*?[".contains($0) } }
-        let literal = parts.prefix { !isPattern($0) }
+    ///
+    /// - Parameter base: A folder the path is in, whose name is taken as it is, whatever characters it has.
+    static func folders(on path: String, under base: String = "") -> [RemoteCommands.Folder] {
+        guard (base + path).hasPrefix("/") else { return [] }
+        let split: (String) -> [String] = { $0.split(separator: "/", omittingEmptySubsequences: true).map(String.init) }
+        let baseParts = split(base)
+        let parts = baseParts + split(path)
+        let isPattern: (Int) -> Bool = { index in
+            index >= baseParts.count && parts[index].contains { "*?[".contains($0) }
+        }
+        let literal = parts.indices.prefix { !isPattern($0) }.count
         // The last part of a path without wildcards is the file itself, not a folder on the way.
-        let count = literal.count == parts.count ? literal.count - 1 : literal.count
-        return (1...max(count, 1)).prefix(count).map { length in
+        let count = literal == parts.count ? literal - 1 : literal
+        return (0..<max(count, 0)).map { index in
             RemoteCommands.Folder(
-                path: "/" + parts.prefix(length).joined(separator: "/"),
-                mustBeListable: length < parts.count && isPattern(parts[length])
+                path: "/" + parts.prefix(index + 1).joined(separator: "/"),
+                mustBeListable: index + 1 < parts.count && isPattern(index + 1)
             )
         }
     }

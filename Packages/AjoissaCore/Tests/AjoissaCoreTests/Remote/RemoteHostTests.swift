@@ -151,6 +151,9 @@ final class RemoteHostTests: RemoteHostTestCase {
             XCTAssertEqual(try host.files(matching: "~/logs/run.log").map(\.size), [5], shellPath)
             XCTAssertEqual(try host.file(at: "~/logs/run.log")?.size, 5, shellPath)
             XCTAssertEqual(try host.read("~/logs/run.log", range: 0..<3), Data("123".utf8), shellPath)
+            try lock("\(oddHome)/logs")
+            XCTAssertThrowsError(try host.files(matching: "~/logs/*.log"), shellPath)
+            try lock("\(oddHome)/logs", permissions: 0o755)
         }
         XCTAssertFalse(FileManager.default.fileExists(atPath: "pwned"))
     }
@@ -198,6 +201,16 @@ final class RemoteHostTests: RemoteHostTestCase {
         XCTAssertEqual(RemoteHost.folders(on: "/x"), [])
         XCTAssertEqual(RemoteHost.folders(on: "/*.log"), [])
         XCTAssertEqual(RemoteHost.folders(on: "relative/x"), [])
+        // A home folder is a folder whatever its name looks like.
+        XCTAssertEqual(RemoteHost.folders(on: "/logs/*.log", under: "/Users/odd[1]"), [
+            .init(path: "/Users", mustBeListable: false),
+            .init(path: "/Users/odd[1]", mustBeListable: false),
+            .init(path: "/Users/odd[1]/logs", mustBeListable: true)
+        ])
+        XCTAssertEqual(RemoteHost.folders(on: "/*.log", under: "/Users/odd[1]"), [
+            .init(path: "/Users", mustBeListable: false),
+            .init(path: "/Users/odd[1]", mustBeListable: true)
+        ])
     }
 
     // MARK: - Reading

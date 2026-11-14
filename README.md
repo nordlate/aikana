@@ -57,11 +57,11 @@ A host in the config names an alias from your own `~/.ssh/config`. Ajoissa runs 
 
 - **No questions are asked.** The connection must work without typing anything: a key in the agent or without a passphrase, and a host key that is already known. Connect once by hand first. A connection that would need a prompt counts as unreachable.
 - **`host offline` is its own state.** A machine that cannot be connected to within 10 seconds, or does not answer the first question within another 15, is offline. Its jobs are neither judged nor checked, and the reason `ssh` gave is shown. It needs attention unless the host has `mayBeOffline: true`.
-- **A machine that may be offline** is shown as offline without turning the icon. When it is back, scheduled times that passed while it could not be reached are not held against its jobs, and for a job on an interval the time away does not count. Nothing else is forgiven: a run that was already due before the machine went away is still expected.
+- **A machine that may be offline** is shown as offline without turning the icon. When it is back, scheduled times that passed while it was off or asleep are not held against its jobs, and for a job on an interval that time does not count. Nothing else is forgiven. A run that was already due when the machine was last seen is still expected. So is one whose time passed while the machine was awake and only out of reach: the job could run then, and the machine says whether it did.
 - **A machine that should be on** gets no such allowance: if it was unreachable over a scheduled time and the run did not happen, the run is missed.
 - **Times are the machine's own.** A job's schedule is read in the time zone of the machine it runs on. A machine whose clock differs from this Mac's by more than two minutes is not judged; its jobs are `unknown` and say so.
 - **One connection per machine** is kept open for ten minutes after its last use, through a socket in `~/Library/Caches/Ajoissa/cm`, so a look does not connect once per job.
-- **Machines are looked at side by side.** One that stops answering part of the way through a look is waited for once, for at most 25 seconds; after that the rest of its jobs are `unknown` for that look without further waiting. A look is finished when the slowest machine has answered or been given up on.
+- **Machines are looked at side by side.** When a script that only reads gets no answer, for at most 25 seconds, the machine is given up on for that look: the rest of its jobs are `unknown` without further waiting. A `launchctl` or `command` check that takes too long is waited for by its own timeout and does not count against the machine. A look is finished when the slowest machine has answered or been given up on.
 - **What the remote user's shell prints at login** (a banner, a line from a startup file) is ignored.
 
 ## What Ajoissa runs and reads
@@ -91,7 +91,7 @@ What the remote `/bin/sh` does is a short script sent on its input. There are se
 
 | Script | What it runs on the machine | Why |
 |---|---|---|
-| Probe | `uname -s`, `id -u`, `date +%s`, `sysctl -n kern.boottime kern.waketime`, `readlink /etc/localtime`, and prints `$HOME` | What kind of machine it is, its clock, when it started and woke, its time zone. Sent first in every look. |
+| Probe | `uname -s`, `id -u`, `date +%s`, `sysctl -n kern.boottime`, `sysctl -n kern.waketime`, `readlink /etc/localtime`, and `printf` and `echo` to print `$HOME` and empty lines | What kind of machine it is, its clock, when it started and woke, its time zone. Sent first in every look. |
 | Files by pattern | `cd` into the home folder for a `~/` path, the shell's own pattern matching, `[ -f ]`, `[ -d ]`, `[ -x ]`, `[ -r ]`, `/usr/bin/stat` | Name, size, modification time and identity of the files a `file-age` or `file-size` path matches. Never their contents. |
 | One file | `[ -f ]`, `[ -e ]`, `[ -d ]`, `[ -x ]`, `[ -r ]`, `/usr/bin/stat` | The same for one path: a job's log file. |
 | Read | `[ -e ]`, `[ -f ]`, `[ -r ]`, `tail -c`, `head -c` | The part of a log a run wrote, for a `log-pattern` check; the end of a log to show in the app; a launchd plist. |
@@ -162,7 +162,8 @@ A job can exit with code 0 and still have produced nothing. Checks say what a su
 - **A machine's time zone** is read from where `/etc/localtime` points. If that cannot be read, this Mac's zone is used.
 - **A machine that may be offline and sleeps through a job's time every day** never has that job reported missed. That is what the setting means; leave it off for a machine whose jobs you want to hear about.
 - **`stat` is run as `/usr/bin/stat`** on other machines. Where it is somewhere else, file checks cannot be carried out.
-- **Linux:** checks work on a Linux host, but when it last started or woke is not read yet, and neither are systemd and cron.
+- **Linux:** checks work on a Linux host, but when it last started or woke is not read yet, and neither are systemd and cron. A Linux machine that may be offline is therefore taken to have been off for as long as it could not be reached.
+- **A machine that may be offline, between two looks:** when Ajoissa itself was not looking, the machine is taken to have gone away right after the last look that found it.
 - **A file or argument with a line break in it** cannot be used on another machine.
 - **The app and `ajoissa status` at the same moment.** Both read the history, look, and write it back. If the two overlap, what the one that finishes first saw is overwritten. It is seen again at the next look.
 

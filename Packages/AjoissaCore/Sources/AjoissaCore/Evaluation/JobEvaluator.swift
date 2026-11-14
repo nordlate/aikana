@@ -117,7 +117,8 @@ struct EvaluationPass {
     /// The verdict when the job's machine cannot be reached or cannot be relied on; `nil` when it can.
     mutating func verdictOnHost() -> JobEvaluation? {
         guard evidence.hostReachable else {
-            record.offlineSince = record.offlineSince ?? now
+            // The machine went away some time after the last look, not at this one.
+            record.offlineSince = record.offlineSince ?? previous?.lastEvaluatedAt ?? now
             return finish(.hostOffline, evidence.hostProblem ?? "its host cannot be reached")
         }
         if let offlineSince = record.offlineSince {
@@ -128,23 +129,34 @@ struct EvaluationPass {
         return evidence.hostProblem.map { finishUnreadable($0) }
     }
 
-    /// The machine answers again. For one that is allowed to be off, what was due while it could not be
-    /// reached is not held against the job, and nothing else is forgiven: a scheduled time that was already
-    /// open before the machine went away stays open, so a machine that drops out for a moment cannot hide a
-    /// job that never runs.
+    /// The machine answers again. For one that is allowed to be off, what was due while it was off or asleep
+    /// is not held against the job, and nothing else is forgiven. A scheduled time that was already open when
+    /// the machine was last seen stays open. So does one that passed while the machine was awake and merely
+    /// out of reach: the job could run then, and whether it did shows in what the machine says now. That way
+    /// a machine that drops out of reach now and then cannot hide a job that never runs.
+    ///
+    /// - Parameter offlineSince: The last look at which the machine still answered.
     mutating func comeBackOnline(offlineSince: Date) {
         guard evidence.hostMayBeOffline else { return }
         guard let timetable = record.timetable else {
             startWatchOver()
             return
         }
+        // A machine that cannot say since when it has been awake is taken to have been off all the while.
+        let awakeSince = evidence.awakeSince.map { min($0, now) }
         if timetable.calendarRules.isEmpty {
-            // On an interval, the time away does not count: the stretch a run is due in starts that much later.
-            let away = now.timeIntervalSince(offlineSince)
-            record.intervalFrom = min((record.intervalFrom ?? record.watchingSince).addingTimeInterval(away), now)
-        } else if openRun(timetable).map({ $0 >= offlineSince }) ?? true {
-            // Everything that is open was due while the machine was away.
+            // On an interval, the time off does not count: the stretch a run is due in starts that much later.
+            // What lies between the last look and a wake after it is added where the interval is worked out.
+            let end = awakeSince.map { min($0, previous?.lastEvaluatedAt ?? now) } ?? now
+            let off = max(0, end.timeIntervalSince(offlineSince))
+            record.intervalFrom = min((record.intervalFrom ?? record.watchingSince).addingTimeInterval(off), now)
+            return
+        }
+        guard let open = openRun(timetable) else { return }
+        if open >= offlineSince, awakeSince.map({ $0 > open }) ?? true {
+            // The oldest open time passed while the machine was off. Only what is due from its wake on counts.
             startWatchOver()
+            record.watchingSince = max(awakeSince ?? now, offlineSince)
         }
     }
 
