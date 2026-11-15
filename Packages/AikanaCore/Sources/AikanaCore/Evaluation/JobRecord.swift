@@ -88,6 +88,9 @@ public struct JobRecord: Sendable, Equatable, Codable {
     /// The most recent verdicts the job settled on, oldest first. `waiting`, `running` and `unknown` are passing
     /// moments between verdicts and are not listed, and a verdict is not listed twice in a row.
     public var transitions: [Transition]
+    /// The recent runs, oldest first, as ``RunLog`` keeps them for showing. `nil` in a record from before runs
+    /// were kept.
+    public var runs: [RunMark]?
 
     public init(
         watchingSince: Date,

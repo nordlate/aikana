@@ -85,6 +85,27 @@ extension Check {
     }
 }
 
+extension Check {
+    /// The type of check, as it is written in the config.
+    public var kind: String {
+        switch self {
+        case .fileAge: "file-age"
+        case .fileSize: "file-size"
+        case .command: "command"
+        case .logPattern: "log-pattern"
+        }
+    }
+
+    /// What the check looks at: a path, the program it runs, or "the job's log".
+    public var target: String {
+        switch self {
+        case let .fileAge(path, _), let .fileSize(path, _): path
+        case let .command(arguments, _): arguments.first ?? ""
+        case let .logPattern(path, _, _): path ?? "the job's log"
+        }
+    }
+}
+
 extension CheckOutcome {
     /// The result in one line: "passed", "failed: …" or "could not be carried out: …".
     public var summary: String {

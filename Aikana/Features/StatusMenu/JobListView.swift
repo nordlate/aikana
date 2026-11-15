@@ -106,8 +106,8 @@ struct JobRowView: View {
                 text = Wording.sentence(report.reason)
             }
         case .failed:
-            text = report.lastRun.map { Wording.sentence("\(Wording.recent($0, now: now)) · \(report.reason)") }
-                ?? Wording.sentence(report.reason)
+            text = report.lastRun.map { Wording.sentence("\(Wording.recent($0, now: now)) · \(Wording.shortReason(report.reason))") }
+                ?? Wording.sentence(Wording.shortReason(report.reason))
         case .stale, .unknown, .hostOffline:
             text = Wording.sentence(report.reason)
         }

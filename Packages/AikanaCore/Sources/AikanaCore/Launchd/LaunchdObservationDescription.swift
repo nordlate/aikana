@@ -15,6 +15,31 @@ extension LaunchdObservation {
         }
     }
 
+    /// The job's state in parts, each marked when it is a sign of trouble: "loaded, idle", "last exit 1",
+    /// "41 runs".
+    public var statusParts: [StatusPart] {
+        switch status {
+        case let .loaded(state):
+            var parts = [StatusPart(state.runWords.map { "loaded, \($0)" } ?? "loaded")]
+            switch state.lastExit {
+            case .neverExited: parts.append(StatusPart("never exited"))
+            case let .code(code): parts.append(StatusPart("last exit \(code)", isProblem: code != 0))
+            case let .signal(signal): parts.append(StatusPart("ended by signal \(signal)", isProblem: true))
+            case nil: break
+            }
+            if let runs = state.runs {
+                parts.append(StatusPart(runs == 1 ? "1 run" : "\(runs) runs"))
+            }
+            return parts
+        case .notLoaded:
+            return [StatusPart("not loaded", isProblem: true)]
+        case .plistMissing:
+            return [StatusPart("not found", isProblem: true)]
+        case let .unknown(reason):
+            return [StatusPart("unknown: \(reason)")]
+        }
+    }
+
     /// The job's timetable in a few words, or why there is none to show.
     public var scheduleDescription: String {
         if let definitionProblem {
@@ -28,6 +53,16 @@ extension LaunchdObservation {
 }
 
 private extension LaunchdServiceState {
+    /// Whether the job is running, in a word or two.
+    var runWords: String? {
+        switch runState {
+        case .running: processID.map { "running as process \($0)" } ?? "running"
+        case .notRunning: "idle"
+        case let .other(text): text
+        case nil: nil
+        }
+    }
+
     var descriptionParts: [String] {
         var parts: [String] = []
         switch runState {

@@ -2,216 +2,300 @@ import AikanaCore
 import AppKit
 import SwiftUI
 
-/// One job: its schedule, its checks, what it has been through, and the end of its log.
+/// One job: the verdict and its recent runs, the facts, its checks, the end of its log, and what it has been through.
 struct JobDetailView: View {
     let model: WatchModel
     let report: JobReport
     let back: () -> Void
+    @State private var contentHeight: CGFloat = 0
 
     /// How many past verdicts are listed.
     static let historyLimit = 10
+    /// The detail grows with its content up to this, then scrolls.
+    static let maxContentHeight: CGFloat = 600
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 6) {
-                Button(action: back) {
-                    Label("Jobs", systemImage: "chevron.left")
-                }
-                .buttonStyle(.borderless)
-                .keyboardShortcut(.cancelAction)
-                Spacer()
-                Text(report.job.name)
-                    .font(.headline)
-                    .lineLimit(1)
-                Spacer()
-                Label(report.state.title, systemImage: report.state.symbolName)
-                    .font(.callout)
-                    .foregroundStyle(report.state.color)
-            }
-            .padding(12)
+            header
             Divider()
             ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    Text(Wording.sentence(report.reason))
-                        .font(.callout)
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
-                    facts
+                VStack(alignment: .leading, spacing: 0) {
+                    summary
                     if !report.checks.isEmpty {
-                        section("Checks") { checks }
-                    }
-                    if !report.transitions.isEmpty {
-                        section("History") { history }
+                        Divider()
+                        ChecksSection(checks: report.checks)
                     }
                     ForEach(report.logPaths, id: \.self) { path in
+                        Divider()
                         LogSection(model: model, path: path, isLocal: model.isLocal(jobWithID: report.id), refreshedWith: report)
+                    }
+                    if !report.transitions.isEmpty {
+                        Divider()
+                        statusChanges
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(12)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
+            }
+            .scrollBounceBehavior(.basedOnSize)
+            .frame(height: min(max(contentHeight, 1), Self.maxContentHeight))
+        }
+    }
+
+    private var header: some View {
+        ZStack {
+            Text(report.job.name)
+                .font(.headline)
+                .lineLimit(1)
+                .padding(.horizontal, 80)
+            HStack {
+                Button(action: back) {
+                    HStack(spacing: 3) {
+                        Image(systemName: "chevron.left")
+                        Text("Jobs")
+                    }
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
+                .keyboardShortcut(.cancelAction)
+                Spacer()
+                Label(report.state.title, systemImage: report.state.symbolName)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(report.state.color)
             }
         }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+
+    // MARK: - Summary
+
+    private var summary: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(DetailWording.headline(of: report))
+                    .font(.system(size: 15, weight: .semibold))
+                if let subline = DetailWording.subline(of: report) {
+                    Text(subline)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            let runs = DetailWording.shownRuns(of: report)
+            if !runs.isEmpty {
+                RunStrip(runs: runs)
+            }
+            facts
+        }
+        .font(.callout)
+        .padding(16)
     }
 
     private var facts: some View {
-        Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 10, verticalSpacing: 4) {
-            fact("Schedule", report.schedule.isEmpty ? "None" : Wording.sentence(report.schedule))
-            if let source = report.source {
-                fact("Source", source)
-            }
-            if let status = report.sourceStatus {
-                fact("Scheduler", Wording.sentence(status))
-            }
+        Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 14, verticalSpacing: 6) {
             if report.lastRun != nil || report.source != nil {
-                fact("Last run", report.lastRun.map { Wording.moment($0) } ?? "No run seen yet")
+                fact("Last run", Text(report.lastRun.map { Wording.sentence(Wording.day($0)) } ?? "No run seen yet"))
             }
             if let next = report.nextRun {
-                fact("Next run", Wording.moment(next))
+                fact("Next run", Text(Wording.sentence(Wording.day(next))))
+            }
+            fact("Schedule", Text(report.schedule.isEmpty ? "None" : Wording.sentence(report.schedule)))
+            if let source = report.source {
+                let parts = DetailWording.source(source)
+                fact(parts.name, Text(parts.value).font(.callout.monospaced()))
+            }
+            if !report.sourceStatusParts.isEmpty {
+                fact("State", stateText)
+            } else if let status = report.sourceStatus {
+                fact("State", Text(Wording.sentence(status)))
             }
         }
-        .font(.callout)
     }
 
-    private func fact(_ name: String, _ value: String) -> some View {
+    /// "Loaded, idle · last exit 1 · 41 runs", with the parts that are trouble in red.
+    private var stateText: Text {
+        report.sourceStatusParts.enumerated().reduce(Text("")) { text, item in
+            let (index, part) = item
+            let words = index == 0 ? Wording.sentence(part.text) : part.text
+            let piece = Text(words).foregroundColor(part.isProblem ? .red : nil)
+            return index == 0 ? piece : text + Text(" · ") + piece
+        }
+    }
+
+    private func fact(_ name: String, _ value: Text) -> some View {
         GridRow {
             Text(name)
                 .foregroundStyle(.secondary)
-            Text(value)
+            value
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
 
-    private var checks: some View {
-        ForEach(Array(report.checks.enumerated()), id: \.offset) { _, check in
-            HStack(alignment: .top, spacing: 6) {
-                Image(systemName: check.outcome.result.symbolName)
-                    .foregroundStyle(check.outcome.result.color)
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(check.label)
-                        .font(.callout.monospaced())
-                    Text(Wording.sentence(check.outcome.summary))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    if let detail = check.outcome.detail {
-                        Text(detail)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(6)
-                    }
-                }
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
+    // MARK: - Status changes
 
-    private var history: some View {
-        ForEach(Array(report.transitions.suffix(Self.historyLimit).reversed().enumerated()), id: \.offset) { _, transition in
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Image(systemName: transition.state.symbolName)
-                    .foregroundStyle(transition.state.color)
-                    .accessibilityHidden(true)
-                Text(Wording.moment(transition.date))
-                    .monospacedDigit()
-                Text("\(transition.state.title): \(transition.reason)")
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .font(.caption)
-        }
-    }
-
-    private func section(_ title: String, @ViewBuilder content: () -> some View) -> some View {
+    private var statusChanges: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.caption.weight(.semibold))
+            SectionTitle("Status changes")
+            ForEach(Array(report.transitions.suffix(Self.historyLimit).reversed().enumerated()), id: \.offset) { _, transition in
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Image(systemName: transition.state.symbolName)
+                        .foregroundStyle(transition.state.color)
+                        .accessibilityHidden(true)
+                    Text(Wording.sentence(Wording.day(transition.date)))
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                    Text("\(transition.state.title): \(Wording.shortReason(transition.reason))")
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .font(.callout)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+    }
+}
+
+/// A small heading over a part of the detail.
+struct SectionTitle: View {
+    let title: String
+
+    init(_ title: String) {
+        self.title = title
+    }
+
+    var body: some View {
+        Text(title)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .accessibilityAddTraits(.isHeader)
+    }
+}
+
+/// The recent runs as dots, oldest first: green for a run that was fine, red for one that failed, yellow for
+/// one that was missed.
+private struct RunStrip: View {
+    let runs: [RunMark]
+
+    var body: some View {
+        HStack(spacing: 5) {
+            ForEach(Array(runs.enumerated()), id: \.offset) { _, run in
+                mark(run)
+                    .help("\(Wording.sentence(Wording.day(run.date))): \(word(run.outcome))")
+            }
+            Text(DetailWording.runsCaption(runs))
                 .foregroundStyle(.secondary)
-                .accessibilityAddTraits(.isHeader)
-            content()
+                .padding(.leading, 6)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(DetailWording.runsCaption(runs))
+    }
+
+    @ViewBuilder private func mark(_ run: RunMark) -> some View {
+        switch run.outcome {
+        case .ok: Circle().fill(.green).frame(width: 9, height: 9)
+        case .failed: RoundedRectangle(cornerRadius: 2).fill(.red).frame(width: 9, height: 9)
+        case .missed: Circle().strokeBorder(.yellow, lineWidth: 2).frame(width: 9, height: 9)
+        }
+    }
+
+    private func word(_ outcome: RunMark.Outcome) -> String {
+        switch outcome {
+        case .ok: "on schedule"
+        case .failed: "failed"
+        case .missed: "missed"
         }
     }
 }
 
-/// The end of one log file, and a button that opens the file.
-struct LogSection: View {
-    let model: WatchModel
-    let path: String
-    /// Whether the log is on this Mac, where it can be opened.
-    let isLocal: Bool
-    /// The log is read again whenever the job has been looked at again.
-    let refreshedWith: JobReport
-    @State private var log: WatchModel.LogText?
+/// The job's checks. When every one passed they fold into one line that opens on a click.
+private struct ChecksSection: View {
+    let checks: [JobReport.CheckReport]
+    @State private var isOpen = false
 
-    /// How many lines of the end of the log are shown.
-    static let lineLimit = 40
+    private var allPassed: Bool {
+        checks.allSatisfy { $0.outcome.result == .passed }
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(path)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .help(path)
-                Spacer()
-                if isLocal {
-                    Button("Open Log") {
-                        NSWorkspace.shared.open(Self.fileURL(of: path))
+        VStack(alignment: .leading, spacing: 10) {
+            if allPassed {
+                Button {
+                    withAnimation(.snappy) { isOpen.toggle() }
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "checkmark.circle")
+                            .font(.system(size: 15))
+                            .foregroundStyle(.green)
+                            .frame(width: 20)
+                        Text(DetailWording.passedCaption(count: checks.count))
+                            .fontWeight(.semibold)
+                        Spacer()
+                        Image(systemName: "chevron.down")
+                            .rotationEffect(.degrees(isOpen ? 180 : 0))
+                            .foregroundStyle(.secondary)
                     }
-                    .controlSize(.small)
-                    .disabled(log == .missing)
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+            } else {
+                SectionTitle("Checks")
             }
-            switch log {
-            case nil:
-                ProgressView()
-                    .controlSize(.small)
-            case .missing:
-                note("There is no such file.")
-            case let .unreadable(message):
-                note(Wording.sentence(message))
-            case let .text(text):
-                if text.isEmpty {
-                    note("The log is empty.")
-                } else {
-                    ScrollView(.horizontal) {
-                        Text(Self.lastLines(of: text))
-                            .font(.caption.monospaced())
-                            .textSelection(.enabled)
-                            .padding(6)
-                    }
-                    .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
+            if !allPassed || isOpen {
+                ForEach(Array(checks.enumerated()), id: \.offset) { _, check in
+                    CheckRow(check: check)
                 }
             }
         }
-        .task(id: refreshedWith) {
-            log = await model.logText(at: path, ofJobWithID: refreshedWith.id)
+        .font(.callout)
+        .padding(16)
+    }
+}
+
+private struct CheckRow: View {
+    let check: JobReport.CheckReport
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: check.outcome.result.symbolName)
+                .font(.system(size: 15))
+                .foregroundStyle(check.outcome.result.color)
+                .frame(width: 20)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(check.kind)
+                        .font(.caption.monospaced())
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(Color.primary.opacity(0.1), in: RoundedRectangle(cornerRadius: 4))
+                    Text(Wording.sentence(DetailWording.shortPath(check.target)))
+                        .fontWeight(.semibold)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .help(check.target)
+                    Spacer(minLength: 6)
+                    Text(DetailWording.checkResult(check.outcome.result))
+                        .fontWeight(check.outcome.result == .passed ? .regular : .semibold)
+                        .foregroundStyle(check.outcome.result == .passed ? .secondary : check.outcome.result.color)
+                        .fixedSize()
+                }
+                if let message = DetailWording.checkMessage(check.outcome.result) {
+                    Text(message)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if let detail = check.outcome.detail {
+                    Text(detail)
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(6)
+                        .textSelection(.enabled)
+                }
+            }
         }
-    }
-
-    private func note(_ text: String) -> some View {
-        Text(text)
-            .font(.caption)
-            .foregroundStyle(.secondary)
-    }
-
-    /// The file a path means. Only a leading `~/` is the home folder, as when the log is read.
-    static func fileURL(of path: String) -> URL {
-        if path.hasPrefix("~/") {
-            return FileManager.default.homeDirectoryForCurrentUser.appending(path: String(path.dropFirst(2)), directoryHint: .notDirectory)
-        }
-        return URL(fileURLWithPath: path)
-    }
-
-    static func lastLines(of text: String) -> String {
-        text.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
-            .reversed()
-            .drop { $0.isEmpty }
-            .prefix(lineLimit)
-            .reversed()
-            .joined(separator: "\n")
     }
 }
