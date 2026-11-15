@@ -1,10 +1,6 @@
 # Aikana
 
-A macOS menu bar app that answers one question: did everything that should have run actually run, on all my machines?
-
 Aikana watches scheduled jobs (launchd on Macs, systemd timers and cron on Linux over SSH). You declare in a config file what is expected to run, where, when, and what counts as success. Aikana reports jobs that failed, jobs that never ran, and jobs that exited cleanly but did not produce their result.
-
-"Aikana" is Finnish for "during": it tells you what happened during the night, while nobody was looking.
 
 ## Status
 
@@ -216,3 +212,7 @@ cd Packages/AikanaCore
 swift test
 swift run aikana --version
 ```
+
+## License
+
+MIT. See [LICENSE](LICENSE).
