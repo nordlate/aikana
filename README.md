@@ -1,4 +1,4 @@
-# Aikana
+![Aikana. Keeps watch on your scheduled jobs. A macOS menu bar app that tells you when a job failed, never ran, or finished without producing its result. Shown beside it: the panel with a failed database backup and a missed nightly report, and the failed backup's detail with its runs, checks and log.](docs/images/banner.webp)
 
 Aikana watches scheduled jobs (launchd on Macs, systemd timers and cron on Linux over SSH). You declare in a config file what is expected to run, where, when, and what counts as success. Aikana reports jobs that failed, jobs that never ran, and jobs that exited cleanly but did not produce their result.
 
