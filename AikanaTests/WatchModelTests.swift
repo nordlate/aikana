@@ -22,6 +22,8 @@ final class WatchModelTests: WatchModelTestCase {
 
         XCTAssertEqual(model.menuBarSymbolName, "clock.badge.checkmark")
         XCTAssertEqual(model.headline, "Everything is fine")
+        XCTAssertEqual(model.tally, "2 jobs")
+        XCTAssertEqual(model.sections.map(\.kind), [.fine])
         XCTAssertEqual(model.reports.map(\.id), ["b", "a"])
         XCTAssertNotNil(model.lastLooked)
         XCTAssertFalse(model.isLooking)
@@ -33,7 +35,10 @@ final class WatchModelTests: WatchModelTestCase {
         await model.refresh()
 
         XCTAssertEqual(model.menuBarSymbolName, "clock.badge.exclamationmark")
-        XCTAssertEqual(model.headline, "1 needs attention")
+        XCTAssertEqual(model.headline, "1 job needs attention")
+        XCTAssertEqual(model.tally, "1 other fine")
+        XCTAssertEqual(model.sections.map(\.kind), [.attention, .fine])
+        XCTAssertEqual(model.sections.first?.rows.map(\.id), ["b"])
     }
 
     func testAFailedJobIsAFailure() async {
@@ -42,7 +47,9 @@ final class WatchModelTests: WatchModelTestCase {
         await model.refresh()
 
         XCTAssertEqual(model.menuBarSymbolName, "clock.badge.xmark")
-        XCTAssertEqual(model.headline, "1 failed, 2 need attention")
+        XCTAssertEqual(model.badge, .failure)
+        XCTAssertEqual(model.headline, "3 jobs need attention")
+        XCTAssertNil(model.tally)
         XCTAssertEqual(model.report(withID: "b")?.state, .missed)
         XCTAssertNil(model.report(withID: "gone"))
     }
@@ -54,6 +61,7 @@ final class WatchModelTests: WatchModelTestCase {
 
         XCTAssertEqual(model.content, .jobs([]))
         XCTAssertEqual(model.headline, "No jobs configured")
+        XCTAssertNil(model.tally)
         XCTAssertEqual(model.menuBarSymbolName, "clock.badge.checkmark")
     }
 
@@ -132,7 +140,7 @@ final class WatchModelTests: WatchModelTestCase {
         XCTAssertEqual(model.menuBarSymbolName, "clock.badge.checkmark")
 
         await model.refresh()
-        XCTAssertEqual(model.headline, "1 needs attention")
+        XCTAssertEqual(model.headline, "1 job needs attention")
         XCTAssertEqual(model.menuBarSymbolName, "clock.badge.exclamationmark")
     }
 
@@ -187,7 +195,7 @@ final class WatchModelTests: WatchModelTestCase {
         let rounds = Rounds([looked()])
         let model = model(rounds: rounds)
         await model.refresh()
-        XCTAssertEqual(model.lookNote()?.hasPrefix("Looked at "), true)
+        XCTAssertEqual(model.lookNote()?.hasPrefix("Checked "), true)
         XCTAssertNil(model.lookingSince)
 
         await rounds.holdNext()
@@ -196,7 +204,7 @@ final class WatchModelTests: WatchModelTestCase {
             await Task.yield()
         }
         let began = model.lookingSince ?? .distantFuture
-        XCTAssertEqual(model.lookNote(now: began.addingTimeInterval(60))?.hasPrefix("Looked at "), true)
+        XCTAssertEqual(model.lookNote(now: began.addingTimeInterval(60))?.hasPrefix("Checked "), true)
         XCTAssertEqual(model.lookNote(now: began.addingTimeInterval(120))?.hasPrefix("Still looking since "), true)
 
         await rounds.release()

@@ -20,21 +20,84 @@ final class WordingTests: WatchModelTestCase {
         XCTAssertEqual(Wording.moment(inSeven, now: now), inSeven.formatted(.dateTime.day().month(.abbreviated).hour().minute()))
     }
 
-    func testRowTimes() {
+    func testRecentMoments() {
         let calendar = Calendar.current
-        let now = calendar.date(from: DateComponents(year: 2026, month: 11, day: 14, hour: 9)) ?? .distantPast
-        var report = report("a", .ok)
-        XCTAssertNil(JobRowView.times(of: report, now: now))
-        report.source = "launchd com.example.a"
-        XCTAssertEqual(JobRowView.times(of: report, now: now), "No run seen yet")
+        let now = calendar.date(from: DateComponents(year: 2026, month: 11, day: 15, hour: 9)) ?? .distantPast
+        XCTAssertEqual(Wording.recent(now.addingTimeInterval(-30), now: now), "just now")
+        XCTAssertEqual(Wording.recent(now.addingTimeInterval(-120), now: now), "2 min ago")
+        let early = now.addingTimeInterval(-5 * 3600)
+        XCTAssertEqual(Wording.recent(early, now: now), "today \(Wording.moment(early, now: now))")
+        let saturday = now.addingTimeInterval(-24 * 3600)
+        XCTAssertEqual(Wording.recent(saturday, now: now), Wording.moment(saturday, now: now))
+    }
 
-        report.lastRun = calendar.date(from: DateComponents(year: 2026, month: 11, day: 14, hour: 2))
-        report.nextRun = calendar.date(from: DateComponents(year: 2026, month: 11, day: 15, hour: 2))
-        let last = Wording.moment(report.lastRun ?? now, now: now)
-        let next = Wording.moment(report.nextRun ?? now, now: now)
-        XCTAssertEqual(JobRowView.times(of: report, now: now), "Last run \(last) · Next \(next)")
-        // Today is a time alone; another day says which.
-        XCTAssertLessThan(last.count, next.count)
+    func testIntervals() {
+        XCTAssertEqual(Wording.interval(30), "30 s")
+        XCTAssertEqual(Wording.interval(15 * 60), "15 min")
+        XCTAssertEqual(Wording.interval(2 * 3600), "2 h")
+        XCTAssertEqual(Wording.interval(5400), "1 h 30 min")
+        XCTAssertEqual(Wording.interval(86_400), "1 d")
+        XCTAssertEqual(Wording.interval(90_000), "25 h")
+    }
+
+    func testRowDetails() {
+        let calendar = Calendar.current
+        let now = calendar.date(from: DateComponents(year: 2026, month: 11, day: 15, hour: 9)) ?? .distantPast
+        let lastRun = calendar.date(from: DateComponents(year: 2026, month: 11, day: 14, hour: 2, minute: 6)) ?? now
+        let due = calendar.date(from: DateComponents(year: 2026, month: 11, day: 15, hour: 2)) ?? now
+        let last = Wording.moment(lastRun, now: now)
+        let dueText = Wording.moment(due, now: now)
+
+        var report = report("a", .ok)
+        report.reason = "its checks pass"
+        XCTAssertEqual(JobRowView.detail(of: PanelRow(report: report, hostName: nil), now: now), "Its checks pass")
+        report.source = "launchd com.example.a"
+        XCTAssertEqual(JobRowView.detail(of: PanelRow(report: report, hostName: nil), now: now), "No run seen yet")
+        report.lastRun = now.addingTimeInterval(-10)
+        XCTAssertEqual(JobRowView.detail(of: PanelRow(report: report, hostName: "studio"), now: now), "Ran just now · studio")
+
+        report.state = .missed
+        report.lastRun = lastRun
+        report.expectedRun = due
+        XCTAssertEqual(JobRowView.detail(of: PanelRow(report: report, hostName: nil), now: now), "Due today \(dueText) · last ran \(last)")
+
+        report.state = .failed
+        report.reason = "its last run exited with code 1"
+        XCTAssertEqual(JobRowView.detail(of: PanelRow(report: report, hostName: nil), now: now), "\(last) · its last run exited with code 1")
+
+        report.state = .unknown
+        report.reason = "not judged yet: of the schedulers, only launchd is read so far"
+        XCTAssertEqual(JobRowView.detail(of: PanelRow(report: report, hostName: nil), now: now), "Not judged yet: of the schedulers, only launchd is read so far")
+    }
+
+    func testRowTrailing() {
+        let calendar = Calendar.current
+        let now = calendar.date(from: DateComponents(year: 2026, month: 11, day: 15, hour: 9)) ?? .distantPast
+        var report = report("a", .ok)
+        XCTAssertEqual(JobRowView.trailing(of: report, now: now).text, "")
+        report.nextRun = calendar.date(from: DateComponents(year: 2026, month: 11, day: 16, hour: 3))
+        XCTAssertEqual(JobRowView.trailing(of: report, now: now).text, Wording.moment(report.nextRun ?? now, now: now))
+        report.repeatInterval = 15 * 60
+        XCTAssertEqual(JobRowView.trailing(of: report, now: now).text, "Every 15 min")
+        XCTAssertFalse(JobRowView.trailing(of: report, now: now).isState)
+        report.state = .missed
+        XCTAssertEqual(JobRowView.trailing(of: report, now: now).text, "Missed")
+        XCTAssertTrue(JobRowView.trailing(of: report, now: now).isState)
+    }
+
+    func testSectionsNameTheMachineOnlyWhenThereAreSeveral() throws {
+        let config = try ConfigLoader.load(Data("""
+            { version: 1, hosts: [ { id: 'studio', ssh: 'studio' } ], jobs: [
+              { id: 'x', source: { launchd: 'com.example.x' } },
+              { id: 'y', host: 'studio', source: { launchd: 'com.example.y' } } ] }
+            """.utf8))
+        var other = report("b", .unknown)
+        other.job = Job(id: "b", name: "b", hostID: "studio", source: nil, schedule: nil, grace: Job.defaultGrace, notify: true, checks: [])
+        let one = PanelSection.sections(of: HostGroup.groups(of: [report("a", .ok)], hosts: config.hosts))
+        XCTAssertEqual(one.first?.rows.first?.hostName, nil)
+        let two = PanelSection.sections(of: HostGroup.groups(of: [report("a", .ok), other], hosts: config.hosts))
+        XCTAssertEqual(two.map(\.kind), [.fine, .unknown])
+        XCTAssertEqual(two.last?.rows.first?.hostName, "studio")
     }
 
     func testSentence() {

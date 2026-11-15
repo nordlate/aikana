@@ -30,6 +30,11 @@ public struct JobReport: Sendable, Equatable, Identifiable {
     /// The latest run is known to have happened no earlier than this.
     public var lastRun: Date?
     public var nextRun: Date?
+    /// The scheduled time the verdict is about: for a job that is `missed` or `waiting`, the run that is due.
+    /// `nil` for a job with no scheduled times.
+    public var expectedRun: Date?
+    /// How often the job runs, for a job that repeats on an interval and has no scheduled times.
+    public var repeatInterval: TimeInterval?
     /// One entry per check that was carried out. Empty when the checks were not run.
     public var checks: [CheckReport]
     /// The verdicts the job settled on, oldest first.
