@@ -1,4 +1,14 @@
-# Aikana
+<h1 align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/logo-dark.svg">
+    <img src="docs/images/logo-light.svg" alt="Aikana" width="300">
+  </picture>
+</h1>
+
+<p align="center">
+  <img src="docs/images/panel-attention.png" align="top" alt="The Aikana panel: a failed database backup and a missed nightly report under Needs attention, five other jobs fine" width="380">
+  <img src="docs/images/detail-failed.png" align="top" alt="Job detail for the failed database backup: last 14 runs, scheduler state, a failed file-age check and the last lines of its log" width="380">
+</p>
 
 Aikana watches scheduled jobs (launchd on Macs, systemd timers and cron on Linux over SSH). You declare in a config file what is expected to run, where, when, and what counts as success. Aikana reports jobs that failed, jobs that never ran, and jobs that exited cleanly but did not produce their result.
 
