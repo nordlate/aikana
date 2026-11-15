@@ -19,6 +19,8 @@ final class JobWatchTests: WatchTestCase {
         XCTAssertEqual(report.sourceStatus, "loaded, not running, 1 run, last exit code 3")
         XCTAssertEqual(report.schedule, "daily at 02:00")
         XCTAssertEqual(report.nextRun, TestClock.date("2026-11-15 02:00"))
+        XCTAssertEqual(report.expectedRun, TestClock.date("2026-11-14 02:00"))
+        XCTAssertNil(report.repeatInterval)
         XCTAssertEqual(report.logPaths, ["/tmp/com.example.exit3.log"])
         XCTAssertTrue(report.changed)
         XCTAssertEqual(report.transitions.map(\.state), [.failed])
@@ -84,6 +86,8 @@ final class JobWatchTests: WatchTestCase {
         let reports = try look("{ id: 'b', schedule: { every: '1h' }, checks: [ { type: 'file-age', path: '/b/*' } ] }, \(Self.failingAgentJob)", history: &history)
 
         XCTAssertEqual(reports.map(\.id), ["b", "report"])
+        XCTAssertEqual(reports.first?.repeatInterval, 3600)
+        XCTAssertNil(reports.first?.expectedRun)
         XCTAssertEqual(history.jobs.keys.sorted(), ["b", "report"])
     }
 

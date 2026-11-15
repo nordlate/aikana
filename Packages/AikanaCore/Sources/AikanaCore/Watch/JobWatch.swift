@@ -233,16 +233,24 @@ public struct JobWatch: Sendable {
             now: now,
             calendar: machine.calendar
         )
-        let evaluation = assessment.evaluation
+        Self.take(assessment.evaluation, into: &report)
+        report.checks = zip(job.checks, assessment.outcomes).map { JobReport.CheckReport(label: $0.label, outcome: $1) }
+        report.logPaths = Self.unique(logPaths + job.checks.compactMap(\.logPath))
+        return (report, assessment.evaluation.record)
+    }
+
+    /// Puts the verdict and the times it rests on into the report.
+    private static func take(_ evaluation: JobEvaluation, into report: inout JobReport) {
         report.state = evaluation.state
         report.reason = evaluation.reason
         report.lastRun = evaluation.record.lastRun
         report.nextRun = evaluation.nextRun
-        report.checks = zip(job.checks, assessment.outcomes).map { JobReport.CheckReport(label: $0.label, outcome: $1) }
+        report.expectedRun = evaluation.expectedRun
+        if let timetable = evaluation.record.timetable, timetable.calendarRules.isEmpty {
+            report.repeatInterval = timetable.interval
+        }
         report.transitions = evaluation.record.transitions
-        report.logPaths = Self.unique(logPaths + job.checks.compactMap(\.logPath))
         report.changed = evaluation.changed
-        return (report, evaluation.record)
     }
 
     /// When the newest of some log files was last written. Files that are missing or cannot be looked at are
