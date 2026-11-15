@@ -27,7 +27,7 @@ swift run aikana validate --config ~/.config/aikana/config.json5
 
 The menu bar icon has three states: everything is fine, something needs attention (a run is missing, a job has been unreadable for a day, a machine cannot be reached, or the config or history file cannot be used), and a job failed.
 
-The panel lists the jobs by machine, those that need a look first. A job opens to its schedule, what its scheduler said, each check with its result, the verdicts it has been through, and the end of its log with a button that opens the file.
+The panel lists the jobs under "Needs attention", "Fine" and "Unknown", with headings only when there is more than one group. Each row says when the job last ran or was due, and on the right its state or when it runs next. With more than one machine, each row also names its machine. A job opens to its schedule, what its scheduler said, each check with its result, the verdicts it has been through, and the end of its log with a button that opens the file.
 
 Aikana looks at every job once a minute, when the Mac wakes, and when you press refresh (⌘R in the list). It reads the config file again within a few seconds of a change. A config that cannot be used is shown with every problem in it, in place of the list; fix the file and the list comes back by itself. A history file that cannot be read or saved turns the icon to "needs attention" too.
 
@@ -47,7 +47,7 @@ The first look after installing tells, in one notification, every job that is al
 
 What you were last told about a job is kept in its record in the history file, so restarting Aikana does not repeat it. `aikana status` reads and writes the same history and never uses it up. The first time, macOS asks whether Aikana may show notifications; one that is due before you answer is not shown later.
 
-The menu at the bottom opens the config file (or shows where it should be when there is none), shows the history folder, holds the notification switches, and sets whether Aikana opens at login.
+The footer says whether notifications are on, with a button to turn them on, or to open System Settings when macOS blocks them. The `…` menu at the top right opens the config file (or shows where it should be when there is none), shows the history folder, holds the notification switches, and sets whether Aikana opens at login.
 
 The app uses the same config and history files as `aikana status`, and honours `AIKANA_CONFIG` and `AIKANA_HISTORY`.
 
