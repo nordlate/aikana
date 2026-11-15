@@ -1,4 +1,5 @@
 import AikanaCore
+import AppKit
 import SwiftUI
 
 /// The panel that opens from the menu bar item: the list of jobs, or one job in detail.
@@ -6,6 +7,7 @@ struct StatusMenuView: View {
     let model: WatchModel
     @State private var listHeight: CGFloat = 0
     @State private var loginProblem: String?
+    @State private var panelHeight: CGFloat = 0
 
     static let panelWidth: CGFloat = 380
     /// The list grows with its jobs up to this, then scrolls.
@@ -19,7 +21,6 @@ struct StatusMenuView: View {
                 JobDetailView(model: model, report: report) {
                     model.showJob(withID: nil)
                 }
-                .frame(height: Self.otherHeight)
             } else {
                 header
                 Divider()
@@ -29,6 +30,11 @@ struct StatusMenuView: View {
             FooterView(model: model, loginProblem: loginProblem)
         }
         .frame(width: Self.panelWidth)
+        // The panel window keeps the size it opened with; it is made to follow the content's own height.
+        .fixedSize(horizontal: false, vertical: true)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { panelHeight = $0 }
+        .background(PanelWindowSizer(height: panelHeight))
+        .frame(maxHeight: .infinity, alignment: .top)
     }
 
     private var header: some View {
@@ -171,6 +177,28 @@ private struct ProblemView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(12)
+        }
+    }
+}
+
+/// Sets the height of the window the panel is in, keeping its top edge where it is.
+private struct PanelWindowSizer: NSViewRepresentable {
+    let height: CGFloat
+
+    func makeNSView(context: Context) -> NSView {
+        NSView()
+    }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        let height = height
+        DispatchQueue.main.async {
+            guard height > 0, let window = view.window else { return }
+            var frame = window.frame
+            let delta = height - window.contentRect(forFrameRect: frame).height
+            guard abs(delta) > 0.5 else { return }
+            frame.origin.y -= delta
+            frame.size.height += delta
+            window.setFrame(frame, display: true)
         }
     }
 }

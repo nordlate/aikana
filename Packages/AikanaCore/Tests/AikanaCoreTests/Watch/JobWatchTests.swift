@@ -21,6 +21,9 @@ final class JobWatchTests: WatchTestCase {
         XCTAssertEqual(report.nextRun, TestClock.date("2026-11-15 02:00"))
         XCTAssertEqual(report.expectedRun, TestClock.date("2026-11-14 02:00"))
         XCTAssertNil(report.repeatInterval)
+        XCTAssertEqual(report.sourceStatusParts.map(\.text), ["loaded, idle", "last exit 3", "1 run"])
+        XCTAssertEqual(report.runs, [RunMark(date: TestClock.date("2026-11-14 02:00"), outcome: .failed)])
+        XCTAssertEqual(history.jobs["report"]?.runs, report.runs)
         XCTAssertEqual(report.logPaths, ["/tmp/com.example.exit3.log"])
         XCTAssertTrue(report.changed)
         XCTAssertEqual(report.transitions.map(\.state), [.failed])
@@ -65,6 +68,8 @@ final class JobWatchTests: WatchTestCase {
         XCTAssertEqual(report.state, .failed)
         XCTAssertEqual(report.reason, "/backups/latest.tar is 10 B, less than the 1 KB it should be")
         XCTAssertEqual(report.checks.map(\.label), ["file-age /backups/*.tar", "file-size /backups/*.tar", "log-pattern /backups/backup.log"])
+        XCTAssertEqual(report.checks.map(\.kind), ["file-age", "file-size", "log-pattern"])
+        XCTAssertEqual(report.checks.map(\.target), ["/backups/*.tar", "/backups/*.tar", "/backups/backup.log"])
         XCTAssertEqual(report.checks.first?.outcome.result, .passed)
         XCTAssertEqual(report.logPaths, ["/backups/backup.log"])
     }

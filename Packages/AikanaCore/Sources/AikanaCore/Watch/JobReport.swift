@@ -5,11 +5,21 @@ public struct JobReport: Sendable, Equatable, Identifiable {
     public struct CheckReport: Sendable, Equatable {
         /// The check in a few words, as it is written in the config.
         public var label: String
+        /// The type of check, as it is written in the config: "file-age".
+        public var kind: String
+        /// What it looks at: a path, a program, or "the job's log".
+        public var target: String
         public var outcome: CheckOutcome
 
-        public init(label: String, outcome: CheckOutcome) {
+        public init(label: String, kind: String = "", target: String = "", outcome: CheckOutcome) {
             self.label = label
+            self.kind = kind
+            self.target = target
             self.outcome = outcome
+        }
+
+        public init(check: Check, outcome: CheckOutcome) {
+            self.init(label: check.label, kind: check.kind, target: check.target, outcome: outcome)
         }
     }
 
@@ -25,6 +35,8 @@ public struct JobReport: Sendable, Equatable, Identifiable {
     public var source: String?
     /// What the scheduler said about the job, in one line.
     public var sourceStatus: String?
+    /// The same in parts, each marked when it is a sign of trouble: "loaded, idle", "last exit 1", "41 runs".
+    public var sourceStatusParts: [StatusPart] = []
     /// The timetable in plain words, or why there is none to show.
     public var schedule: String
     /// The latest run is known to have happened no earlier than this.
@@ -43,6 +55,8 @@ public struct JobReport: Sendable, Equatable, Identifiable {
     public var logPaths: [String]
     /// Whether the state is news since the last look.
     public var changed: Bool
+    /// The recent runs, oldest first.
+    public var runs: [RunMark] = []
     /// Whether the job's machine is one that is allowed to be switched off or asleep.
     public var hostMayBeOffline = false
 
@@ -86,6 +100,18 @@ public struct JobReport: Sendable, Equatable, Identifiable {
         self.transitions = transitions
         self.logPaths = logPaths
         self.changed = changed
+    }
+}
+
+/// A piece of what a scheduler said about a job.
+public struct StatusPart: Sendable, Equatable {
+    public var text: String
+    /// Whether it is a sign of trouble, such as a non-zero exit code.
+    public var isProblem: Bool
+
+    public init(_ text: String, isProblem: Bool = false) {
+        self.text = text
+        self.isProblem = isProblem
     }
 }
 

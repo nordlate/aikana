@@ -63,7 +63,7 @@ final class WordingTests: WatchModelTestCase {
 
         report.state = .failed
         report.reason = "its last run exited with code 1"
-        XCTAssertEqual(JobRowView.detail(of: PanelRow(report: report, hostName: nil), now: now), "\(last) · its last run exited with code 1")
+        XCTAssertEqual(JobRowView.detail(of: PanelRow(report: report, hostName: nil), now: now), "\(last) · exited with code 1")
 
         report.state = .unknown
         report.reason = "not judged yet: of the schedulers, only launchd is read so far"

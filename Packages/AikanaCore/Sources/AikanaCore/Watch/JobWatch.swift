@@ -214,6 +214,7 @@ public struct JobWatch: Sendable {
                 logPaths = observation.logPaths
                 evidence.source = SourceEvidence(launchd: observation, logModified: Self.latestModification(of: logPaths, on: access))
                 report.sourceStatus = observation.statusDescription
+                report.sourceStatusParts = observation.statusParts
                 if job.schedule == nil {
                     report.schedule = observation.scheduleDescription
                 }
@@ -234,9 +235,12 @@ public struct JobWatch: Sendable {
             calendar: machine.calendar
         )
         Self.take(assessment.evaluation, into: &report)
-        report.checks = zip(job.checks, assessment.outcomes).map { JobReport.CheckReport(label: $0.label, outcome: $1) }
+        report.checks = zip(job.checks, assessment.outcomes).map { JobReport.CheckReport(check: $0, outcome: $1) }
         report.logPaths = Self.unique(logPaths + job.checks.compactMap(\.logPath))
-        return (report, assessment.evaluation.record)
+        var record = assessment.evaluation.record
+        record.runs = RunLog.note(assessment.evaluation, in: record.runs ?? [])
+        report.runs = record.runs ?? []
+        return (report, record)
     }
 
     /// Puts the verdict and the times it rests on into the report.
