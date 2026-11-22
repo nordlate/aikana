@@ -60,12 +60,12 @@ extension WatchModel {
         }
     }
 
-    var menuBarSymbolName: String {
+    /// The image in the menu bar: Aikana's mark, with a badge when something needs looking at.
+    var menuBarImageName: String {
         switch badge {
-        case .looking: "clock"
-        case .fine: "clock.badge.checkmark"
-        case .attention: "clock.badge.exclamationmark"
-        case .failure: "clock.badge.xmark"
+        case .looking, .fine: "MenuBar"
+        case .attention: "MenuBar-attention"
+        case .failure: "MenuBar-failure"
         }
     }
 

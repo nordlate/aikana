@@ -10,7 +10,7 @@ final class WatchModelTests: WatchModelTestCase {
         let model = model(rounds: Rounds([looked()]))
 
         XCTAssertEqual(model.content, .starting)
-        XCTAssertEqual(model.menuBarSymbolName, "clock")
+        XCTAssertEqual(model.menuBarImageName, "MenuBar")
         XCTAssertEqual(model.headline, "Looking…")
         XCTAssertNil(model.lastLooked)
     }
@@ -20,7 +20,7 @@ final class WatchModelTests: WatchModelTestCase {
 
         await model.refresh()
 
-        XCTAssertEqual(model.menuBarSymbolName, "clock.badge.checkmark")
+        XCTAssertEqual(model.menuBarImageName, "MenuBar")
         XCTAssertEqual(model.headline, "Everything is fine")
         XCTAssertEqual(model.tally, "2 jobs")
         XCTAssertEqual(model.sections.map(\.kind), [.fine])
@@ -34,7 +34,7 @@ final class WatchModelTests: WatchModelTestCase {
 
         await model.refresh()
 
-        XCTAssertEqual(model.menuBarSymbolName, "clock.badge.exclamationmark")
+        XCTAssertEqual(model.menuBarImageName, "MenuBar-attention")
         XCTAssertEqual(model.headline, "1 job needs attention")
         XCTAssertEqual(model.tally, "1 other fine")
         XCTAssertEqual(model.sections.map(\.kind), [.attention, .fine])
@@ -46,7 +46,7 @@ final class WatchModelTests: WatchModelTestCase {
 
         await model.refresh()
 
-        XCTAssertEqual(model.menuBarSymbolName, "clock.badge.xmark")
+        XCTAssertEqual(model.menuBarImageName, "MenuBar-failure")
         XCTAssertEqual(model.badge, .failure)
         XCTAssertEqual(model.headline, "3 jobs need attention")
         XCTAssertNil(model.tally)
@@ -62,7 +62,7 @@ final class WatchModelTests: WatchModelTestCase {
         XCTAssertEqual(model.content, .jobs([]))
         XCTAssertEqual(model.headline, "No jobs configured")
         XCTAssertNil(model.tally)
-        XCTAssertEqual(model.menuBarSymbolName, "clock.badge.checkmark")
+        XCTAssertEqual(model.menuBarImageName, "MenuBar")
     }
 
     func testABrokenConfigShowsEveryProblemInsteadOfAList() async {
@@ -72,7 +72,7 @@ final class WatchModelTests: WatchModelTestCase {
         await model.refresh()
 
         XCTAssertEqual(model.content, .configProblem(["jobs[0] (a): needs a source", "version is required"]))
-        XCTAssertEqual(model.menuBarSymbolName, "clock.badge.exclamationmark")
+        XCTAssertEqual(model.menuBarImageName, "MenuBar-attention")
         XCTAssertEqual(model.headline, "The config file cannot be used")
         XCTAssertTrue(model.reports.isEmpty)
     }
@@ -85,7 +85,7 @@ final class WatchModelTests: WatchModelTestCase {
         XCTAssertEqual(model.content, .historyProblem(
             "/h.json cannot be used as the history: it is not a valid history file. Move it aside to start a new history; runs seen so far will then be forgotten."
         ))
-        XCTAssertEqual(model.menuBarSymbolName, "clock.badge.exclamationmark")
+        XCTAssertEqual(model.menuBarImageName, "MenuBar-attention")
     }
 
     func testAHistoryThatCannotBeSavedIsNotedBesideTheJobs() async {
@@ -100,11 +100,11 @@ final class WatchModelTests: WatchModelTestCase {
         await model.refresh()
         XCTAssertEqual(model.saveProblem, "What was seen could not be saved to /h.json: the disk is full")
         XCTAssertEqual(model.reports.map(\.id), ["a"])
-        XCTAssertEqual(model.menuBarSymbolName, "clock.badge.exclamationmark")
+        XCTAssertEqual(model.menuBarImageName, "MenuBar-attention")
 
         await model.refresh()
         XCTAssertNil(model.saveProblem)
-        XCTAssertEqual(model.menuBarSymbolName, "clock.badge.checkmark")
+        XCTAssertEqual(model.menuBarImageName, "MenuBar")
     }
 
     func testAFixedConfigBringsTheListBack() async {
@@ -137,11 +137,11 @@ final class WatchModelTests: WatchModelTestCase {
 
         await model.refresh()
         XCTAssertEqual(model.headline, "Everything is fine")
-        XCTAssertEqual(model.menuBarSymbolName, "clock.badge.checkmark")
+        XCTAssertEqual(model.menuBarImageName, "MenuBar")
 
         await model.refresh()
         XCTAssertEqual(model.headline, "1 job needs attention")
-        XCTAssertEqual(model.menuBarSymbolName, "clock.badge.exclamationmark")
+        XCTAssertEqual(model.menuBarImageName, "MenuBar-attention")
     }
 
     // MARK: - When it looks

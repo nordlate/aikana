@@ -16,7 +16,7 @@ struct AikanaApp: App {
         MenuBarExtra {
             StatusMenuView(model: model)
         } label: {
-            Image(systemName: model.menuBarSymbolName)
+            Image(model.menuBarImageName)
                 .accessibilityLabel("Aikana: \(model.headline)")
         }
         .menuBarExtraStyle(.window)
