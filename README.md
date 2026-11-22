@@ -187,6 +187,7 @@ Packages/AikanaCore/     The engine, a Swift package
   Sources/AikanaCLI/     The `aikana` command line tool
   Examples/               Example config
   Tests/AikanaCoreTests/ Engine tests
+scripts/                 Release scripts (see RELEASING.md)
 ```
 
 ## Principles

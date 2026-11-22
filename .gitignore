@@ -15,3 +15,8 @@ build/
 # Misc
 .netrc
 *.log
+
+# Signing and notarization keys: never committed (see RELEASING.md)
+*.p12
+*.p8
+AuthKey_*
