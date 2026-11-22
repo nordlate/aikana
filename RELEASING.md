@@ -37,9 +37,27 @@ Without a tag it fails unless the version is the same `X.Y.Z` everywhere and the
    git push origin v0.2.0
    ```
 
-3. Create the GitHub release for the tag, with notes on what changed.
+3. Build the disk image from the tag:
 
-Building, signing and notarizing the download are added here when that lands (#32).
+   ```sh
+   scripts/release.sh 0.2.0
+   ```
+
+   It checks the versions, archives, exports with Developer ID, notarizes and staples the app, puts it in a disk image with an Applications link, signs, notarizes and staples the image, and verifies all of it. The result is `build/release/0.2.0/Aikana-0.2.0.dmg`; its SHA-256 is printed at the end. If Xcode is not the selected developer directory, prefix it with `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`.
+
+4. Try the image as a user gets it: upload it to a draft release, download it with a browser (so it is quarantined), open it, drag the app to Applications and start it. The only prompt should be the usual one for an app downloaded from the internet.
+5. Publish the GitHub release for the tag, with the image attached and notes on what changed.
+
+## One-time setup on the Mac that releases
+
+- The team's **Developer ID Application** certificate, with its private key, in the login Keychain. `release.sh` finds it by team ID, so no name is written in the repo.
+- A **notarytool profile** from an App Store Connect API key (Users and Access → Integrations, Developer access is enough):
+
+  ```sh
+  xcrun notarytool store-credentials aikana-notary --key <path to AuthKey_XXXX.p8> --key-id <key ID> --issuer <issuer ID>
+  ```
+
+  `xcrun notarytool history --keychain-profile aikana-notary` checks it. Another profile name can be given with `AIKANA_NOTARY_PROFILE`.
 
 ## Secrets
 
