@@ -12,6 +12,10 @@ final class AikanaTests: XCTestCase {
         XCTAssertTrue(WatchModel.isHostingTests)
     }
 
+    func testTheAppDoesNotUpdateItselfWhileItHostsTests() {
+        XCTAssertNil(Updater.forThisBuild(hostingTests: true))
+    }
+
     /// The `aikana` command line tool ships inside the app, at the same version.
     func testTheCommandLineToolShipsInsideTheApp() throws {
         let tool = Bundle.main.bundleURL.appending(path: "Contents/Helpers/aikana")

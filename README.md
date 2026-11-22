@@ -73,6 +73,15 @@ Aikana only reads. On this Mac it runs one command and reads one kind of file:
 
 Beyond that it runs only what you tell it to: the program of each `command` check, with the arguments as written and without a shell.
 
+### Updates
+
+The app downloaded from a release keeps itself up to date with [Sparkle](https://sparkle-project.org). This is the only network connection Aikana makes apart from SSH:
+
+- It fetches `https://raw.githubusercontent.com/nordlate/aikana/main/appcast.xml`, the list of releases, once a day, and when you choose "Check for Updates…". The second time the app starts, Sparkle asks whether to check automatically; "Check for Updates Automatically" in the menu changes the answer. The request carries only the app's name and version (in its `User-Agent`); Sparkle's system profiling is off.
+- When you choose to install an update, it downloads the disk image from the release on GitHub, checks that it is signed with Aikana's update key and Aikana's Developer ID, and replaces the app. To do that it runs its own helpers from inside `Aikana.app` (`Autoupdate`, and `Updater.app` to show progress), not through Aikana's code.
+
+An update found in the background is shown as a line in the panel, not in a window of its own. A build from source (Debug) never checks for updates.
+
 ### On other machines
 
 For a host reached over SSH, Aikana runs exactly this, with nothing from your config on the command line:

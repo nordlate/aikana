@@ -5,6 +5,8 @@ import SwiftUI
 /// The panel that opens from the menu bar item: the list of jobs, or one job in detail.
 struct StatusMenuView: View {
     let model: WatchModel
+    /// `nil` in builds that do not update themselves.
+    let updater: Updater?
     @State private var listHeight: CGFloat = 0
     @State private var loginProblem: String?
     @State private var panelHeight: CGFloat = 0
@@ -25,6 +27,12 @@ struct StatusMenuView: View {
                 header
                 Divider()
                 content
+            }
+            if let updater, let version = updater.waitingVersion {
+                Divider()
+                UpdateReminderView(version: version) {
+                    updater.checkForUpdates()
+                }
             }
             Divider()
             FooterView(model: model, loginProblem: loginProblem)
@@ -70,7 +78,7 @@ struct StatusMenuView: View {
             }
             .foregroundStyle(.secondary)
             .frame(width: 22, height: 22)
-            PanelMenu(model: model, loginProblem: $loginProblem)
+            PanelMenu(model: model, updater: updater, loginProblem: $loginProblem)
                 .foregroundStyle(.secondary)
         }
         .font(.system(size: 15))

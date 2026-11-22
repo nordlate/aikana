@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Merged into the generated Info.plist. Only keys Xcode has no build setting for go here. -->
+	<!-- Sparkle: where to look for updates, and the public half of the key updates are signed with. -->
+	<key>SUFeedURL</key>
+	<string>https://raw.githubusercontent.com/nordlate/aikana/main/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>Si1+3XjcnZoqtwftnCWjP4W5hyTyK47JwgM1FebQTF4=</string>
+</dict>
+</plist>

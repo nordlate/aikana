@@ -47,6 +47,9 @@ Without a tag it fails unless the version is the same `X.Y.Z` everywhere and the
 
 4. Try the image as a user gets it: upload it to a draft release, download it with a browser (so it is quarantined), open it, drag the app to Applications and start it. The only prompt should be the usual one for an app downloaded from the internet.
 5. Publish the GitHub release for the tag, with the image attached and notes on what changed.
+6. `release.sh` also added the new version to `appcast.xml` in the working tree, signed with the update key and pointing at `…/releases/download/v0.2.0/Aikana-0.2.0.dmg`. Open a PR with only that change and merge it **after** the release is published, so the feed never names a download that is not there yet. Installed copies see the update once it is on `main`.
+
+The feed URL (`SUFeedURL` in `Aikana/Info.plist`) is built into every copy ever shipped. Keep `appcast.xml` at the root of `main`.
 
 ## One-time setup on the Mac that releases
 
@@ -58,6 +61,14 @@ Without a tag it fails unless the version is the same `X.Y.Z` everywhere and the
   ```
 
   `xcrun notarytool history --keychain-profile aikana-notary` checks it. Another profile name can be given with `AIKANA_NOTARY_PROFILE`.
+- The **update signing key** (Sparkle EdDSA), in the login Keychain under the account `aikana` (or `AIKANA_SPARKLE_ACCOUNT`). Sparkle's tools come with the package; after a build they are in `build/SourcePackages/artifacts/sparkle/Sparkle/bin/`:
+
+  ```sh
+  generate_keys --account aikana          # makes the key once, prints the public half
+  generate_keys --account aikana -x <file> # exports the private key, for the offline backup
+  ```
+
+  The public half is `SUPublicEDKey` in `Aikana/Info.plist`. `release.sh` refuses to build when the key in the Keychain does not match it.
 
 ## Secrets
 
