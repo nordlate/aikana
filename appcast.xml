@@ -1,6 +1,15 @@
-<?xml version="1.0" encoding="utf-8"?>
-<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/" version="2.0">
     <channel>
         <title>Aikana</title>
+        <item>
+            <title>0.2.0</title>
+            <pubDate>Sun, 22 Nov 2026 14:05:22 +0200</pubDate>
+            <link>https://github.com/nordlate/aikana</link>
+            <sparkle:version>2</sparkle:version>
+            <sparkle:shortVersionString>0.2.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.3</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/nordlate/aikana/releases/download/v0.2.0/Aikana-0.2.0.dmg" length="2942011" type="application/octet-stream" sparkle:edSignature="DEPQoc5tIvJ+7OfPcN8bWSHxRJDoJKlya2pgaxEsYqsYzXGX1C7PoytLOPjF55jKUUucV/uzVte2L+NZ+vuCDQ=="/>
+        </item>
     </channel>
 </rss>
