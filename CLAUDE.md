@@ -55,6 +55,8 @@ Packages/AikanaCore/     The engine
 
 The Xcode project uses `PBXFileSystemSynchronizedRootGroup`: new files under `Aikana/` and `AikanaTests/` are included without editing the project file. The package picks up files under its `Sources/` and `Tests/` folders on its own.
 
+The Xcode project also has an `AikanaCLI` tool target that compiles `Packages/AikanaCore/Sources/AikanaCLI` (a synchronized folder) against the `AikanaCore` product; the app copies it to `Contents/Helpers/aikana` and signs it on copy. `swift run aikana` builds the same sources through the package. `AikanaTests` checks that the helper is there and reports the app's version.
+
 ## Rules
 
 - **AikanaCore is Foundation only.** No AppKit, SwiftUI or UserNotifications in it, and it never imports the app. It will be published as a separate package; keep its public API deliberate and documented.
