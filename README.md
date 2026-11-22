@@ -206,6 +206,12 @@ xcodebuild -scheme Aikana -destination 'platform=macOS' build
 xcodebuild test -scheme Aikana -destination 'platform=macOS,arch=arm64'
 ```
 
+The app carries the `aikana` command line tool inside it, at `Aikana.app/Contents/Helpers/aikana`, built and signed with the app and always at the same version. To use that copy from a terminal, link it onto your `PATH`, for example:
+
+```sh
+ln -s /Applications/Aikana.app/Contents/Helpers/aikana /usr/local/bin/aikana
+```
+
 The engine and the command line tool also build without Xcode's project:
 
 ```sh

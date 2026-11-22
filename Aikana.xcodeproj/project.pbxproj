@@ -9,6 +9,8 @@
 /* Begin PBXBuildFile section */
 		DFDD668FD7AB771872363A44 /* AikanaCore in Frameworks */ = {isa = PBXBuildFile; productRef = 9D0A039038B45EDD72B90E1D /* AikanaCore */; };
 		E08B72C3A3E741846EB22314 /* AikanaCore in Frameworks */ = {isa = PBXBuildFile; productRef = 393210982562BC854E6AB3E3 /* AikanaCore */; };
+		4FEADDF0C6B5FE261D9A3D2C /* AikanaCore in Frameworks */ = {isa = PBXBuildFile; productRef = DAFEB0B8E528E04B7164973F /* AikanaCore */; };
+		344B3ADD2D978A878F3CFAB8 /* aikana in Copy Helpers */ = {isa = PBXBuildFile; fileRef = 3CDA28B9A77F0C3ADB59F2B7 /* aikana */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -19,12 +21,34 @@
 			remoteGlobalIDString = 9C31F6677C696546F1441387;
 			remoteInfo = Aikana;
 		};
+		2DDFCF75B06BF36FB41A8047 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 3E3F7BDDA51A55F22DDBA541 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 8D85C3442C0BA60B5D2D08BB;
+			remoteInfo = AikanaCLI;
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		767FA1D4D91AFA5E47D71AB5 /* Copy Helpers */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = Contents/Helpers;
+			dstSubfolderSpec = 1;
+			files = (
+				344B3ADD2D978A878F3CFAB8 /* aikana in Copy Helpers */,
+			);
+			name = "Copy Helpers";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		3CB1DEB1F99CB8EFE19230A4 /* AikanaCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = AikanaCore; path = Packages/AikanaCore; sourceTree = SOURCE_ROOT; };
 		53318BDA98F61DE8749CDB36 /* Aikana.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Aikana.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C4BE65712EEC8BE2B1F847A7 /* AikanaTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AikanaTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		3CDA28B9A77F0C3ADB59F2B7 /* aikana */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = aikana; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -37,6 +61,12 @@
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = AikanaTests;
 			sourceTree = "<group>";
+		};
+		3247E929FB9023604CABCD77 /* AikanaCLI */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			name = AikanaCLI;
+			path = Packages/AikanaCore/Sources/AikanaCLI;
+			sourceTree = SOURCE_ROOT;
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
@@ -57,6 +87,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D94C822DCF4088D819868FF2 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4FEADDF0C6B5FE261D9A3D2C /* AikanaCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -65,6 +103,7 @@
 			children = (
 				53318BDA98F61DE8749CDB36 /* Aikana.app */,
 				C4BE65712EEC8BE2B1F847A7 /* AikanaTests.xctest */,
+				3CDA28B9A77F0C3ADB59F2B7 /* aikana */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -82,6 +121,7 @@
 			children = (
 				0099EDEAD4C579AC8974F279 /* Aikana */,
 				22C1F14F2FEAE3139F80DEE7 /* AikanaTests */,
+				3247E929FB9023604CABCD77 /* AikanaCLI */,
 				847C8DB9D3833F4F32F76F8F /* Packages */,
 				2351DB9B013BAE5F399A5E4A /* Products */,
 			);
@@ -121,10 +161,12 @@
 				D91524FC9F8743B63D4C9465 /* Sources */,
 				5A89E83B782DFCFEA889BD68 /* Resources */,
 				D17B39EB4476C49CB793520F /* Frameworks */,
+				767FA1D4D91AFA5E47D71AB5 /* Copy Helpers */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				0DC0A724846A971ECD182BB1 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				0099EDEAD4C579AC8974F279 /* Aikana */,
@@ -136,6 +178,28 @@
 			productName = Aikana;
 			productReference = 53318BDA98F61DE8749CDB36 /* Aikana.app */;
 			productType = "com.apple.product-type.application";
+		};
+		8D85C3442C0BA60B5D2D08BB /* AikanaCLI */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 82EFC4BDD3D993D1F65DC020 /* Build configuration list for PBXNativeTarget "AikanaCLI" */;
+			buildPhases = (
+				248670BC47A9B179C2A06E6A /* Sources */,
+				D94C822DCF4088D819868FF2 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				3247E929FB9023604CABCD77 /* AikanaCLI */,
+			);
+			name = AikanaCLI;
+			packageProductDependencies = (
+				DAFEB0B8E528E04B7164973F /* AikanaCore */,
+			);
+			productName = aikana;
+			productReference = 3CDA28B9A77F0C3ADB59F2B7 /* aikana */;
+			productType = "com.apple.product-type.tool";
 		};
 /* End PBXNativeTarget section */
 
@@ -151,6 +215,10 @@
 						ProvisioningStyle = Automatic;
 					};
 					9C31F6677C696546F1441387 = {
+						DevelopmentTeam = 8296FNMH37;
+						ProvisioningStyle = Automatic;
+					};
+					8D85C3442C0BA60B5D2D08BB = {
 						DevelopmentTeam = 8296FNMH37;
 						ProvisioningStyle = Automatic;
 					};
@@ -175,6 +243,7 @@
 			targets = (
 				9C31F6677C696546F1441387 /* Aikana */,
 				9810804DF3E6A0A95CC948C6 /* AikanaTests */,
+				8D85C3442C0BA60B5D2D08BB /* AikanaCLI */,
 			);
 		};
 /* End PBXProject section */
@@ -211,6 +280,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		248670BC47A9B179C2A06E6A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -218,6 +294,11 @@
 			isa = PBXTargetDependency;
 			target = 9C31F6677C696546F1441387 /* Aikana */;
 			targetProxy = C9D875F70AA7E9C63856CC81 /* PBXContainerItemProxy */;
+		};
+		0DC0A724846A971ECD182BB1 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 8D85C3442C0BA60B5D2D08BB /* AikanaCLI */;
+			targetProxy = 2DDFCF75B06BF36FB41A8047 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -428,6 +509,42 @@
 			};
 			name = Debug;
 		};
+		E01E87877C4473478A0CCB45 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CREATE_INFOPLIST_SECTION_IN_BINARY = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.nordlate.aikana.cli.debug;
+				PRODUCT_MODULE_NAME = AikanaCLI;
+				PRODUCT_NAME = aikana;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		DB2865CD54C4B61A4B4FBF47 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CREATE_INFOPLIST_SECTION_IN_BINARY = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.nordlate.aikana.cli;
+				PRODUCT_MODULE_NAME = AikanaCLI;
+				PRODUCT_NAME = aikana;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -458,6 +575,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
+		82EFC4BDD3D993D1F65DC020 /* Build configuration list for PBXNativeTarget "AikanaCLI" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E01E87877C4473478A0CCB45 /* Debug */,
+				DB2865CD54C4B61A4B4FBF47 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
@@ -473,6 +599,10 @@
 			productName = AikanaCore;
 		};
 		9D0A039038B45EDD72B90E1D /* AikanaCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = AikanaCore;
+		};
+		DAFEB0B8E528E04B7164973F /* AikanaCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = AikanaCore;
 		};
