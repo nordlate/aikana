@@ -30,19 +30,11 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		0099EDEAD4C579AC8974F279 /* Aikana */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			explicitFileTypes = {
-			};
-			explicitFolders = (
-			);
 			path = Aikana;
 			sourceTree = "<group>";
 		};
 		22C1F14F2FEAE3139F80DEE7 /* AikanaTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			explicitFileTypes = {
-			};
-			explicitFolders = (
-			);
 			path = AikanaTests;
 			sourceTree = "<group>";
 		};
@@ -257,13 +249,14 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				INFOPLIST_KEY_CFBundleDisplayName = "Aikana Dev";
 				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "© Nordlate";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.nordlate.aikana;
+				PRODUCT_BUNDLE_IDENTIFIER = com.nordlate.aikana.debug;
 				PRODUCT_NAME = Aikana;
 				SDKROOT = macosx;
 			};
