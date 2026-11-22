@@ -11,6 +11,7 @@
 		E08B72C3A3E741846EB22314 /* AikanaCore in Frameworks */ = {isa = PBXBuildFile; productRef = 393210982562BC854E6AB3E3 /* AikanaCore */; };
 		4FEADDF0C6B5FE261D9A3D2C /* AikanaCore in Frameworks */ = {isa = PBXBuildFile; productRef = DAFEB0B8E528E04B7164973F /* AikanaCore */; };
 		344B3ADD2D978A878F3CFAB8 /* aikana in Copy Helpers */ = {isa = PBXBuildFile; fileRef = 3CDA28B9A77F0C3ADB59F2B7 /* aikana */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		F5279F24283974424B8E1874 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 2D094F78F050C28AE9CFA8F8 /* Sparkle */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -51,9 +52,22 @@
 		3CDA28B9A77F0C3ADB59F2B7 /* aikana */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = aikana; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		BB23B0685F7F51C924F39AD8 /* Exceptions for "Aikana" folder in "Aikana" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 9C31F6677C696546F1441387 /* Aikana */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		0099EDEAD4C579AC8974F279 /* Aikana */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				BB23B0685F7F51C924F39AD8 /* Exceptions for "Aikana" folder in "Aikana" target */,
+			);
 			path = Aikana;
 			sourceTree = "<group>";
 		};
@@ -84,6 +98,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				E08B72C3A3E741846EB22314 /* AikanaCore in Frameworks */,
+				F5279F24283974424B8E1874 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -174,6 +189,7 @@
 			name = Aikana;
 			packageProductDependencies = (
 				393210982562BC854E6AB3E3 /* AikanaCore */,
+				2D094F78F050C28AE9CFA8F8 /* Sparkle */,
 			);
 			productName = Aikana;
 			productReference = 53318BDA98F61DE8749CDB36 /* Aikana.app */;
@@ -235,6 +251,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				AEC8CD6F723EFBD990BDA6BF /* XCLocalSwiftPackageReference "Packages/AikanaCore" */,
+				555CF9605C61B1A4F16D76A5 /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 2351DB9B013BAE5F399A5E4A /* Products */;
@@ -337,6 +354,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				INFOPLIST_FILE = Aikana/Info.plist;
 				PRODUCT_BUNDLE_IDENTIFIER = com.nordlate.aikana.debug;
 				PRODUCT_NAME = Aikana;
 				SDKROOT = macosx;
@@ -359,6 +377,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				INFOPLIST_FILE = Aikana/Info.plist;
 				PRODUCT_BUNDLE_IDENTIFIER = com.nordlate.aikana;
 				PRODUCT_NAME = Aikana;
 				SDKROOT = macosx;
@@ -593,6 +612,17 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		555CF9605C61B1A4F16D76A5 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.10.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
 		393210982562BC854E6AB3E3 /* AikanaCore */ = {
 			isa = XCSwiftPackageProductDependency;
@@ -605,6 +635,11 @@
 		DAFEB0B8E528E04B7164973F /* AikanaCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = AikanaCore;
+		};
+		2D094F78F050C28AE9CFA8F8 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 555CF9605C61B1A4F16D76A5 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

@@ -4,12 +4,15 @@
 #   scripts/release.sh 0.2.0
 #
 # Output: build/release/<version>/Aikana-<version>.dmg, plus the archive and
-# the exported app beside it. Stops at the first error.
+# the exported app beside it, and appcast.xml in the repo updated with the new
+# version, ready for its own PR. Stops at the first error.
 #
 # Needs, on this Mac (see RELEASING.md):
 # - the team's Developer ID Application certificate in the Keychain,
 # - a notarytool Keychain profile, named aikana-notary unless
-#   AIKANA_NOTARY_PROFILE names another.
+#   AIKANA_NOTARY_PROFILE names another,
+# - Sparkle's private signing key in the Keychain, under the account aikana
+#   unless AIKANA_SPARKLE_ACCOUNT names another.
 set -euo pipefail
 
 version="${1:-}"
@@ -22,7 +25,11 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
 
 profile="${AIKANA_NOTARY_PROFILE:-aikana-notary}"
+sparkle_account="${AIKANA_SPARKLE_ACCOUNT:-aikana}"
+repository="https://github.com/nordlate/aikana"
 project="Aikana.xcodeproj"
+packages="build/SourcePackages"
+sparkle_bin="$packages/artifacts/sparkle/Sparkle/bin"
 team="$(sed -n 's/^[[:space:]]*DEVELOPMENT_TEAM = \([A-Z0-9]*\);$/\1/p' "$project/project.pbxproj" | sort -u)"
 out="build/release/$version"
 archive="$out/Aikana.xcarchive"
@@ -75,6 +82,21 @@ if ! xcrun notarytool history --keychain-profile "$profile" > /dev/null 2>&1; th
     exit 1
 fi
 
+step "Checking the update signing key"
+xcodebuild -resolvePackageDependencies -project "$project" -scheme Aikana \
+    -clonedSourcePackagesDirPath "$packages" -quiet
+# generate_keys -p prints the public half of the key in the Keychain; it must be the one the app trusts.
+signing_key="$("$sparkle_bin/generate_keys" --account "$sparkle_account" -p 2>/dev/null || true)"
+trusted_key="$(/usr/libexec/PlistBuddy -c "Print :SUPublicEDKey" Aikana/Info.plist)"
+if [ -z "$signing_key" ]; then
+    echo "error: no Sparkle signing key for account \"$sparkle_account\" in the Keychain; see RELEASING.md" >&2
+    exit 1
+fi
+if [ "$signing_key" != "$trusted_key" ]; then
+    echo "error: the Sparkle key in the Keychain does not match SUPublicEDKey in Aikana/Info.plist" >&2
+    exit 1
+fi
+
 rm -rf "$out"
 mkdir -p "$out"
 
@@ -82,6 +104,7 @@ step "Archiving"
 xcodebuild archive \
     -project "$project" -scheme Aikana -configuration Release \
     -destination 'generic/platform=macOS' \
+    -clonedSourcePackagesDirPath "$packages" \
     -archivePath "$archive" \
     -quiet
 
@@ -126,5 +149,22 @@ if [ "$helper_version" != "aikana $version" ]; then
     exit 1
 fi
 
+# After stapling: stapling changes the image, and the signature in the appcast is over its final bytes.
+step "Adding the version to appcast.xml"
+feed="$out/appcast"
+mkdir -p "$feed"
+cp appcast.xml "$feed/appcast.xml"
+cp "$dmg" "$feed/"
+"$sparkle_bin/generate_appcast" \
+    --account "$sparkle_account" \
+    --download-url-prefix "$repository/releases/download/v$version/" \
+    --link "$repository" \
+    --maximum-deltas 0 \
+    -o "$feed/appcast.xml" \
+    "$feed"
+cp "$feed/appcast.xml" appcast.xml
+
 step "Done"
 shasum -a 256 "$dmg"
+echo
+echo "Next: attach $dmg to the v$version release and publish it, then open a PR with the change to appcast.xml."

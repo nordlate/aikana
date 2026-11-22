@@ -60,6 +60,7 @@ struct FooterView: View {
 /// The menu at the top of the panel: files, switches and quitting.
 struct PanelMenu: View {
     let model: WatchModel
+    let updater: Updater?
     @Binding var loginProblem: String?
     @State private var opensAtLogin = SMAppService.mainApp.status == .enabled
 
@@ -76,6 +77,14 @@ struct PanelMenu: View {
             Toggle("Notify When Fine Again", isOn: Binding(get: { model.notifiesRecovery }, set: { model.notifiesRecovery = $0 }))
                 .disabled(!model.notificationsEnabled)
             Toggle("Open at Login", isOn: Binding(get: { opensAtLogin }, set: setOpensAtLogin))
+            if let updater {
+                Divider()
+                Button("Check for Updates…") {
+                    updater.checkForUpdates()
+                }
+                .disabled(!updater.canCheck)
+                Toggle("Check for Updates Automatically", isOn: Binding(get: { updater.checksAutomatically }, set: { updater.checksAutomatically = $0 }))
+            }
             Divider()
             Text("Aikana \(AikanaCore.version)")
             Button("Quit Aikana") {
