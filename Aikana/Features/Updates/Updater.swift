@@ -18,6 +18,9 @@ final class Updater: NSObject {
     /// A newer version Sparkle found on its own and is waiting to show, until the user looks at it.
     private(set) var waitingVersion: String?
     /// Whether Sparkle looks for updates by itself, once a day.
+    ///
+    /// Sparkle owns this setting and can change it without going through here (its own question on a later
+    /// launch, or the user default), so the value shown is a mirror kept up to date by observing Sparkle.
     var checksAutomatically: Bool {
         get { checksAutomaticallyValue }
         set {
@@ -29,6 +32,7 @@ final class Updater: NSObject {
     private var checksAutomaticallyValue = false
     @ObservationIgnored private var controller: SPUStandardUpdaterController?
     @ObservationIgnored private var canCheckObservation: NSKeyValueObservation?
+    @ObservationIgnored private var checksAutomaticallyObservation: NSKeyValueObservation?
 
     /// The updater for this build, or `nil` when this build must not update itself.
     static func forThisBuild(hostingTests: Bool) -> Updater? {
@@ -48,8 +52,12 @@ final class Updater: NSObject {
                 self?.canCheck = updater.canCheckForUpdates
             }
         }
+        checksAutomaticallyObservation = controller.updater.observe(\.automaticallyChecksForUpdates, options: [.initial, .new]) { [weak self] updater, _ in
+            MainActor.assumeIsolated {
+                self?.checksAutomaticallyValue = updater.automaticallyChecksForUpdates
+            }
+        }
         controller.startUpdater()
-        checksAutomaticallyValue = controller.updater.automaticallyChecksForUpdates
     }
 
     /// Looks for an update now and shows the result; brings a waiting update to the front.
